@@ -1,0 +1,538 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/database/generated/prisma"
+  moduleFormat = "cjs" //ให้ Build หรือ Compile โค้ดออกมาเป็น CommonJS (CJS)
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  PENDING_EMAIL_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  BLACKLISTED
+
+  @@map("user_status")
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+
+  @@map("verification_status")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  LINE
+
+  @@map("auth_provider")
+}
+
+enum PetType {
+  DOG
+  CAT
+  BIRD
+  HAMSTER
+  EXOTIC
+  OTHER
+
+  @@map("pet_type")
+}
+
+enum PetGender {
+  MALE
+  FEMALE
+  UNKNOWN
+
+  @@map("pet_gender")
+}
+
+enum PostType {
+  LOST
+  FOUND
+
+  @@map("post_type")
+}
+
+enum PostStatus {
+  ACTIVE
+  REUNITED
+  CLOSED
+  HIDDEN
+  DELETED
+
+  @@map("post_status")
+}
+
+enum NotificationType {
+  AI_MATCH
+  NEW_MESSAGE
+  NEW_CLUE
+  PROFILE_VERIFICATION
+  SYSTEM
+
+  @@map("notification_type")
+}
+
+enum CommunityPostType {
+  LOST_PET
+  FOUND_PET
+  OTHERS
+
+  @@map("community_post_type")
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  REJECTED
+  ACTION_TAKEN
+
+  @@map("report_status")
+}
+
+enum ReportType {
+  POST
+  COMMENT
+
+  @@map("report_type")
+}
+
+model User {
+  id                      String               @id @default(uuid()) @db.Uuid
+  firstName               String               @map("first_name") @db.VarChar(100)
+  lastName                String               @map("last_name") @db.VarChar(100)
+  email                   String               @unique @db.VarChar(255)
+  passwordHash            String?              @map("password_hash") @db.VarChar(255)
+  phone                   String?              @db.VarChar(30)
+  lineId                  String?              @map("line_id") @db.VarChar(100)
+  avatarUrl               String?              @map("avatar_url")
+  role                    UserRole             @default(USER)
+  status                  UserStatus           @default(PENDING_EMAIL_VERIFICATION)
+  emailVerifiedAt         DateTime?            @map("email_verified_at")
+  notificationEnabled     Boolean              @default(true) @map("notification_enabled")
+  twoFactorEnabled        Boolean              @default(true) @map("2fa_enable")
+  createdAt               DateTime             @default(now()) @map("created_at")
+  updatedAt               DateTime             @updatedAt @map("updated_at")
+  authAccounts            AuthAccount[]
+  emailVerifications      EmailVerification[]
+  pets                    Pet[]
+  petPosts                PetPost[]
+  postEvents              PostEvent[]
+  conversationMembers     ConversationMember[]
+  chatRoomMembers         ChatRoomMember[]
+  chatMessages            ChatMessage[]
+  notifications           Notification[]
+  communityPosts          CommunityPost[]
+  communityComments       CommunityComment[]
+  submittedContentReports ContentReport[]      @relation("ContentReportReporter")
+  reviewedContentReports  ContentReport[]      @relation("ContentReportReviewer")
+
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+model AuthAccount {
+  id                String       @id @default(uuid()) @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  provider          AuthProvider
+  providerAccountId String       @map("provider_account_id") @db.VarChar(255)
+  type              String?      @db.VarChar(50)
+  accessToken       String?      @map("access_token")
+  refreshToken      String?      @map("refresh_token")
+  expiresAt         Int?         @map("expires_at")
+  tokenType         String?      @map("token_type") @db.VarChar(50)
+  scope             String?
+  idToken           String?      @map("id_token")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  user              User         @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model EmailVerification {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  email      String    @db.VarChar(255)
+  otpHash    String    @map("otp_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at")
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("email_verifications")
+}
+
+model Pet {
+  id                  String     @id @default(uuid()) @db.Uuid
+  ownerId             String     @map("owner_id") @db.Uuid
+  name                String     @db.VarChar(100)
+  type                PetType
+  breed               String?    @db.VarChar(150)
+  gender              PetGender?
+  color               String?    @db.VarChar(150)
+  age                 Int?
+  distinctiveFeatures String?    @map("distinctive_features")
+  description         String?
+  profileImageUrl     String?    @map("profile_image_url")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+  owner               User       @relation(fields: [ownerId], references: [id])
+  images              PetImage[]
+  qrCode              PetQrCode?
+  posts               PetPost[]
+
+  @@index([ownerId])
+  @@index([type])
+  @@index([breed])
+  @@map("pets")
+}
+
+model PetImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  petId     String   @map("pet_id") @db.Uuid
+  imageUrl  String   @map("image_url")
+  isProfile Boolean  @default(false) @map("is_profile")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  pet       Pet      @relation(fields: [petId], references: [id])
+
+  @@index([petId])
+  @@map("pet_images")
+}
+
+model PetQrCode {
+  id               String   @id @default(uuid()) @db.Uuid
+  petId            String   @unique @map("pet_id") @db.Uuid
+  qrToken          String   @unique @map("qr_token") @db.VarChar(255)
+  qrImageUrl       String?  @map("qr_image_url")
+  publicProfileUrl String   @map("public_profile_url")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  pet              Pet      @relation(fields: [petId], references: [id])
+
+  @@map("pet_qr_codes")
+}
+
+model PetPost {
+  id                    String          @id @default(uuid()) @db.Uuid
+  userId                String          @map("user_id") @db.Uuid
+  petId                 String?         @map("pet_id") @db.Uuid
+  type                  PostType
+  status                PostStatus      @default(ACTIVE)
+  petName               String?         @map("pet_name") @db.VarChar(100)
+  petType               PetType         @map("pet_type")
+  breed                 String?         @db.VarChar(150)
+  gender                PetGender?
+  color                 String?         @db.VarChar(150)
+  distinctiveFeatures   String?         @map("distinctive_features")
+  description           String?
+  eventDate             DateTime        @map("event_date")
+  latitude              Decimal         @db.Decimal(10, 7)
+  longitude             Decimal         @db.Decimal(10, 7)
+  province              String?         @db.VarChar(100)
+  district              String?         @db.VarChar(100)
+  subdistrict           String?         @db.VarChar(100)
+  locationDescription   String?         @map("location_description")
+  rewardAmount          Decimal?        @map("reward_amount") @db.Decimal(12, 2)
+  currentLocation       String?         @map("current_location")
+  contactPhone          String?         @map("contact_phone") @db.VarChar(30)
+  contactLineId         String?         @map("contact_line_id") @db.VarChar(100)
+  contactEmail          String?         @map("contact_email") @db.VarChar(255)
+  viewCount             Int             @default(0) @map("view_count")
+  reunitedAt            DateTime?       @map("reunited_at")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+  user                  User            @relation(fields: [userId], references: [id])
+  pet                   Pet?            @relation(fields: [petId], references: [id])
+  images                PostImage[]
+  lostMatches           AiMatch[]       @relation("LostPostMatches")
+  foundMatches          AiMatch[]       @relation("FoundPostMatches")
+  events                PostEvent[]
+  flyers                Flyer[]
+  conversations         Conversation[]
+  chatRooms             ChatRoom[]
+  notifications         Notification[]
+  relatedCommunityPosts CommunityPost[]
+
+  @@index([userId])
+  @@index([petId])
+  @@index([type])
+  @@index([status])
+  @@index([petType])
+  @@index([breed])
+  @@index([province])
+  @@index([eventDate])
+  @@index([latitude, longitude])
+  @@map("pet_posts")
+}
+
+model PostImage {
+  id         String           @id @default(uuid()) @db.Uuid
+  postId     String           @map("post_id") @db.Uuid
+  imageUrl   String           @map("image_url")
+  sortOrder  Int              @default(0) @map("sort_order")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  post       PetPost          @relation(fields: [postId], references: [id])
+  embeddings ImageEmbedding[]
+
+  @@index([postId])
+  @@map("post_images")
+}
+
+model ImageEmbedding {
+  id           String                @id @default(uuid()) @db.Uuid
+  postImageId  String                @map("post_image_id") @db.Uuid
+  embedding    Unsupported("vector")
+  modelName    String                @map("model_name") @db.VarChar(100)
+  modelVersion String?               @map("model_version") @db.VarChar(50)
+  dimension    Int
+  createdAt    DateTime              @default(now()) @map("created_at")
+  postImage    PostImage             @relation(fields: [postImageId], references: [id])
+
+  @@index([postImageId])
+  @@map("image_embeddings")
+}
+
+model AiMatch {
+  id               String         @id @default(uuid()) @db.Uuid
+  lostPostId       String         @map("lost_post_id") @db.Uuid
+  foundPostId      String         @map("found_post_id") @db.Uuid
+  vectorSimilarity Decimal        @map("vector_similarity") @db.Decimal(6, 5)
+  featureScore     Decimal?       @map("feature_score") @db.Decimal(6, 5)
+  locationScore    Decimal?       @map("location_score") @db.Decimal(6, 5)
+  dateScore        Decimal?       @map("date_score") @db.Decimal(6, 5)
+  finalScore       Decimal        @map("final_score") @db.Decimal(6, 5)
+  distanceKm       Decimal?       @map("distance_km") @db.Decimal(10, 2)
+  modelName        String?        @map("model_name") @db.VarChar(100)
+  modelVersion     String?        @map("model_version") @db.VarChar(50)
+  isNotified       Boolean        @default(false) @map("is_notified")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  lostPost         PetPost        @relation("LostPostMatches", fields: [lostPostId], references: [id])
+  foundPost        PetPost        @relation("FoundPostMatches", fields: [foundPostId], references: [id])
+  notifications    Notification[]
+
+  @@unique([lostPostId, foundPostId])
+  @@index([lostPostId])
+  @@index([foundPostId])
+  @@index([finalScore])
+  @@map("ai_matches")
+}
+
+model PostEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  postId      String   @map("post_id") @db.Uuid
+  createdBy   String?  @map("created_by") @db.Uuid
+  eventType   String   @map("event_type") @db.VarChar(100)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  post        PetPost  @relation(fields: [postId], references: [id])
+  creator     User?    @relation(fields: [createdBy], references: [id])
+
+  @@index([postId])
+  @@index([createdAt])
+  @@map("post_events")
+}
+
+model Flyer {
+  id          String   @id @default(uuid()) @db.Uuid
+  postId      String   @map("post_id") @db.Uuid
+  fileUrl     String   @map("file_url")
+  qrUrl       String?  @map("qr_url")
+  generatedAt DateTime @default(now()) @map("generated_at")
+  post        PetPost  @relation(fields: [postId], references: [id])
+
+  @@index([postId])
+  @@map("flyers")
+}
+
+model Conversation {
+  id            String               @id @default(uuid()) @db.Uuid
+  relatedPostId String?              @map("related_post_id") @db.Uuid
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  relatedPost   PetPost?             @relation(fields: [relatedPostId], references: [id])
+  members       ConversationMember[]
+  notifications Notification[]
+
+  @@index([relatedPostId])
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+  leftAt         DateTime?    @map("left_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model ChatRoom {
+  id        String           @id @default(uuid()) @db.Uuid
+  postId    String           @map("post_id") @db.Uuid
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  post      PetPost          @relation(fields: [postId], references: [id])
+  members   ChatRoomMember[]
+  messages  ChatMessage[]
+
+  @@map("chat_rooms")
+}
+
+model ChatRoomMember {
+  id       String   @id @default(uuid()) @db.Uuid
+  roomId   String   @map("room_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  joinedAt DateTime @default(now()) @map("joined_at")
+  room     ChatRoom @relation(fields: [roomId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@map("chat_room_members")
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid()) @db.Uuid
+  roomId    String    @map("room_id") @db.Uuid
+  senderId  String    @map("sender_id") @db.Uuid
+  content   String
+  imageUrl  String    @map("image_url")
+  isRead    Boolean   @default(false) @map("is_read")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime? @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  room      ChatRoom  @relation(fields: [roomId], references: [id])
+  sender    User      @relation(fields: [senderId], references: [id])
+
+  @@map("chat_messages")
+}
+
+model Notification {
+  id                    String           @id @default(uuid()) @db.Uuid
+  userId                String           @map("user_id") @db.Uuid
+  type                  NotificationType
+  title                 String           @db.VarChar(255)
+  message               String
+  relatedPostId         String?          @map("related_post_id") @db.Uuid
+  relatedMatchId        String?          @map("related_match_id") @db.Uuid
+  relatedConversationId String?          @map("related_conversation_id") @db.Uuid
+  isRead                Boolean          @default(false) @map("is_read")
+  readAt                DateTime?        @map("read_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  user                  User             @relation(fields: [userId], references: [id])
+  relatedPost           PetPost?         @relation(fields: [relatedPostId], references: [id])
+  relatedMatch          AiMatch?         @relation(fields: [relatedMatchId], references: [id])
+  relatedConversation   Conversation?    @relation(fields: [relatedConversationId], references: [id])
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model CommunityPost {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  type             CommunityPostType
+  title            String               @db.VarChar(255)
+  content          String
+  relatedPetPostId String?              @map("related_pet_post_id") @db.Uuid
+  isHidden         Boolean              @default(false) @map("is_hidden")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  user             User                 @relation(fields: [userId], references: [id])
+  relatedPetPost   PetPost?             @relation(fields: [relatedPetPostId], references: [id])
+  images           CommunityPostImage[]
+  comments         CommunityComment[]
+  reports          ContentReport[]
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("community_posts")
+}
+
+model CommunityPostImage {
+  id              String        @id @default(uuid()) @db.Uuid
+  communityPostId String        @map("community_post_id") @db.Uuid
+  imageUrl        String        @map("image_url")
+  sortOrder       Int           @default(0) @map("sort_order")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  communityPost   CommunityPost @relation(fields: [communityPostId], references: [id])
+
+  @@index([communityPostId])
+  @@map("community_post_images")
+}
+
+model CommunityComment {
+  id              String          @id @default(uuid()) @db.Uuid
+  communityPostId String          @map("community_post_id") @db.Uuid
+  userId          String          @map("user_id") @db.Uuid
+  content         String
+  imageUrl        String          @map("image_url")
+  isHidden        Boolean         @default(false) @map("is_hidden")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  communityPost   CommunityPost   @relation(fields: [communityPostId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+  reports         ContentReport[]
+
+  @@index([communityPostId])
+  @@index([userId])
+  @@map("community_comments")
+}
+
+model ContentReport {
+  id              String            @id @default(uuid()) @db.Uuid
+  reporterId      String            @map("reporter_id") @db.Uuid
+  reportType      ReportType        @map("report_type")
+  communityPostId String?           @map("community_post_id") @db.Uuid
+  commentId       String?           @map("comment_id") @db.Uuid
+  reason          String
+  status          ReportStatus      @default(PENDING)
+  reviewedBy      String?           @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime?         @map("reviewed_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  reporter        User              @relation("ContentReportReporter", fields: [reporterId], references: [id])
+  reviewer        User?             @relation("ContentReportReviewer", fields: [reviewedBy], references: [id])
+  communityPost   CommunityPost?    @relation(fields: [communityPostId], references: [id])
+  comment         CommunityComment? @relation(fields: [commentId], references: [id])
+
+  @@index([reporterId])
+  @@index([status])
+  @@index([reportType])
+  @@map("content_reports")
+}
