@@ -9,12 +9,16 @@ import { JwtModule } from '@/infrastructure/jwt/jwt.module';
 
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
+import { PetQrModule } from './pet-qr/pet-qr.module';
+import { DatabaseModule } from '@/database/database.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validate }),
     AuthModule,
     JwtModule,
+    PetQrModule,
+    DatabaseModule,
   ],
   controllers: [],
   providers: [
