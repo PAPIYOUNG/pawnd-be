@@ -1,4 +1,291 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { PrismaService } from '@/database/prisma.service';
+import { BcryptService } from '@/infrastructure/hash/bcrypt.service';
+import { MailService } from '@/infrastructure/mail/mail.service';
+import { RegisterDto } from '@/auth/dto/register.dto';
+import { generateToken, hashToken } from '@/common/utils/token.util';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { LoginDto } from './dto/login.dto';
+import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
+import { RefreshTokenService } from '@/infrastructure/jwt/refresh-token.service';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+
+const EMAIL_VERIFICATION_TTL_MINUTES = 15;
+
+const PASSWORD_RESET_TTL_MINUTES = 15;
 
 @Injectable()
-export class AuthService {}
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bcryptService: BcryptService,
+    private readonly mailService: MailService,
+    private readonly accessTokenService: AccessTokenService,
+    private readonly refreshTokenService: RefreshTokenService,
+  ) {}
+
+  async register(dto: RegisterDto) {
+    const passwordHash = await this.bcryptService.hash(dto.password);
+
+    const user = await this.prisma.user.create({
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    await this.sendVerificationEmail(user.id, user.email);
+
+    return user;
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const passwordMatches = await this.bcryptService.compare(
+      dto.password,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.status === 'PENDING_EMAIL_VERIFICATION') {
+      throw new UnauthorizedException(
+        'Please verify your email before logging in',
+      );
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const accessToken = await this.accessTokenService.sign({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const refreshToken = await this.refreshTokenService.issue(
+      user.id,
+      dto.rememberMe,
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        avatarUrl: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return { user };
+  }
+
+  async refresh(dto: RefreshTokenDto) {
+    const userId = await this.refreshTokenService.verify(dto.refreshToken);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    await this.refreshTokenService.revoke(dto.refreshToken);
+
+    const accessToken = await this.accessTokenService.sign({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    const refreshToken = await this.refreshTokenService.issue(user.id);
+
+    return { accessToken, refreshToken };
+  }
+
+  async logout(dto: RefreshTokenDto) {
+    await this.refreshTokenService.revoke(dto.refreshToken);
+    return { message: 'Logged out successfully' };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (user) {
+      const token = generateToken();
+
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(
+            Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
+          ),
+        },
+      });
+
+      await this.mailService.send({
+        to: user.email,
+        subject: 'Reset your Pawnd password',
+        text: `Your password reset token: ${token}`,
+      });
+    }
+
+    return { message: 'Password reset link sent to email' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const resetToken = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        tokenHash: hashToken(dto.token),
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const passwordHash = await this.bcryptService.hash(dto.newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: resetToken.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Password reset successfully' };
+  }
+
+  async verifyEmail(dto: VerifyEmailDto) {
+    const verification = await this.prisma.emailVerification.findFirst({
+      where: {
+        otpHash: hashToken(dto.token),
+        verifiedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!verification) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.emailVerification.update({
+        where: { id: verification.id },
+        data: { verifiedAt: new Date() },
+      }),
+      this.prisma.user.update({
+        where: { id: verification.userId },
+        data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Email verified successfully' };
+  }
+
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.status !== 'PENDING_EMAIL_VERIFICATION') {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    await this.sendVerificationEmail(user.id, user.email);
+
+    return { message: 'Verification email resent' };
+  }
+
+  private async sendVerificationEmail(userId: string, email: string) {
+    const token = generateToken();
+
+    await this.prisma.emailVerification.create({
+      data: {
+        userId,
+        email,
+        otpHash: hashToken(token),
+        expiresAt: new Date(
+          Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60 * 1000,
+        ),
+      },
+    });
+
+    await this.mailService.send({
+      to: email,
+      subject: 'Verify your Pawnd account',
+      text: `Your verification token: ${token}`,
+    });
+  }
+}
