@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 
@@ -16,22 +17,35 @@ import { Public } from '@/common/decorators/public.decorator';
 @Controller('pets')
 export class PetQrController {
   constructor(private readonly petQrService: PetQrService) {}
-  @Public()
+
   @Post(':id/qr')
   @HttpCode(HttpStatus.CREATED)
   generatePetQrCode(
     @Param('id', ParseUUIDPipe) petId: string,
-    //@CurrentUser('sub') userId: string,
+    @CurrentUser('sub') userId: string,
   ): Promise<PetQrResponseDto> {
-    return this.petQrService.generatePetQrCode(
-      petId,
-      '95dc75df-8779-4fa0-957d-0d35e15e2e72',
-    );
+    return this.petQrService.generatePetQrCode(petId, userId);
+  }
+
+  @Patch(':id/qr/deactivate')
+  deactivatePetQrCode(
+    @Param('id', ParseUUIDPipe) petId: string,
+    @CurrentUser('sub') userId: string,
+  ): Promise<PetQrResponseDto> {
+    return this.petQrService.deactivatePetQrCode(petId, userId);
   }
 
   @Public()
   @Get('public/qr/:qrToken')
   getPublicPetProfile(@Param('qrToken') qrToken: string) {
     return this.petQrService.getPublicPetProfile(qrToken);
+  }
+
+  @Get(':id/qr')
+  getPetQrCode(
+    @Param('id', ParseUUIDPipe) petId: string,
+    @CurrentUser('sub') userId: string,
+  ): Promise<PetQrResponseDto> {
+    return this.petQrService.getPetQrCode(petId, userId);
   }
 }

@@ -173,6 +173,122 @@ export class PetQrService {
     };
   }
 
+  async deactivatePetQrCode(
+    petId: string,
+    userId: string,
+  ): Promise<PetQrResponseDto> {
+    const pet = await this.prisma.pet.findUnique({
+      where: {
+        id: petId,
+      },
+
+      select: {
+        ownerId: true,
+
+        qrCode: {
+          select: {
+            id: true,
+            petId: true,
+            qrToken: true,
+            qrImageUrl: true,
+            publicProfileUrl: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    if (pet.ownerId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to deactivate this pet QR code',
+      );
+    }
+
+    if (!pet.qrCode) {
+      throw new NotFoundException('Pet QR code not found');
+    }
+
+    // ปิดอยู่แล้วและไม่มีรูปบน Cloudinary
+    if (!pet.qrCode.isActive && !pet.qrCode.qrImageUrl) {
+      return pet.qrCode;
+    }
+
+    // ลบรูปออกจาก Cloudinary
+    if (pet.qrCode.qrImageUrl) {
+      await this.cloudinary.deletePetQrCode(petId);
+    }
+
+    // เก็บ QR record ไว้ แต่ปิดการใช้งาน
+    return this.prisma.petQrCode.update({
+      where: {
+        petId,
+      },
+
+      data: {
+        isActive: false,
+        qrImageUrl: null,
+      },
+
+      select: {
+        id: true,
+        petId: true,
+        qrToken: true,
+        qrImageUrl: true,
+        publicProfileUrl: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async getPetQrCode(petId: string, userId: string): Promise<PetQrResponseDto> {
+    const pet = await this.prisma.pet.findUnique({
+      where: {
+        id: petId,
+      },
+
+      select: {
+        ownerId: true,
+
+        qrCode: {
+          select: {
+            id: true,
+            petId: true,
+            qrToken: true,
+            qrImageUrl: true,
+            publicProfileUrl: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    if (pet.ownerId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to access this pet QR code',
+      );
+    }
+
+    if (!pet.qrCode) {
+      throw new NotFoundException('Pet QR code not found');
+    }
+
+    return pet.qrCode;
+  }
+
   //ส่วนย่อย
 
   //สร้างข้อมูลสุ่ม 32 bytes

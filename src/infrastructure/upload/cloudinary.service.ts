@@ -1,4 +1,5 @@
 import { EnvVariableType } from '@/config/env.validate';
+import { CloudinaryResourceType } from '@/infrastructure/upload/type/cloudinary-resource.types';
 import {
   Injectable,
   InternalServerErrorException,
@@ -73,5 +74,41 @@ export class CloudinaryService {
 
       uploadStream.end(buffer);
     });
+  }
+
+  deletePetQrCode(petId: string): Promise<void> {
+    // Public ID ไม่มี .png
+    const publicId = `pawnd/pet-qr/${petId}`;
+
+    return this.deleteAsset(publicId, 'image');
+  }
+
+  async deleteAsset(
+    publicId: string,
+    resourceType: CloudinaryResourceType = 'image',
+  ): Promise<void> {
+    try {
+      const result = await cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+        invalidate: true,
+      });
+
+      if (result.result !== 'ok' && result.result !== 'not found') {
+        this.logger.error(`Failed to delete Cloudinary asset: ${publicId}`);
+
+        throw new InternalServerErrorException('Failed to delete file');
+      }
+    } catch (error: unknown) {
+      if (error instanceof InternalServerErrorException) {
+        throw error;
+      }
+
+      this.logger.error(
+        `Cloudinary delete failed: ${publicId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw new InternalServerErrorException('Failed to delete file');
+    }
   }
 }
