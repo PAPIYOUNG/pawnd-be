@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary, UploadApiOptions } from 'cloudinary';
 import { Readable } from 'stream';
 
 @Injectable({})
@@ -37,6 +37,41 @@ export class CloudinaryService {
         },
       );
       Readable.from(file.buffer).pipe(writableStream);
+    });
+  }
+
+  uploadPetQrCode(qrBuffer: Buffer, petId: string): Promise<string> {
+    return this.uploadBuffer(qrBuffer, {
+      resource_type: 'image',
+      folder: 'pawnd/pet-qr',
+      public_id: petId,
+      overwrite: true,
+      invalidate: true,
+      format: 'png',
+    });
+  }
+
+  private uploadBuffer(
+    buffer: Buffer,
+    options: UploadApiOptions = {},
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        options,
+        (error, result) => {
+          if (error || !result) {
+            this.logger.error('Cloudinary upload failed', error);
+
+            reject(new InternalServerErrorException('Upload failed'));
+
+            return;
+          }
+
+          resolve(result.secure_url);
+        },
+      );
+
+      uploadStream.end(buffer);
     });
   }
 }

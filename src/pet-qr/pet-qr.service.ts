@@ -6,15 +6,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'node:crypto';
 import * as QRCode from 'qrcode';
-
 import { PrismaService } from '@/database/prisma.service';
 import { PetQrResponseDto } from './dto/pet-qr-response.dto';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
+import { PublicPetProfileResponseDto } from '@/pet-qr/dto/public-pet-profile-response.dto';
 
 @Injectable()
 export class PetQrService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   async generatePetQrCode(
@@ -60,8 +62,9 @@ export class PetQrService {
 
     const qrToken = this.generateQrToken();
     const publicProfileUrl = this.buildPublicProfileUrl(qrToken);
-    const qrImageUrl = await this.generateQrImage(publicProfileUrl);
-
+    const qrBuffer = await this.generateQrImage(publicProfileUrl);
+    // Upload แล้วรับ URL จริงกลับมา
+    const qrImageUrl = await this.cloudinary.uploadPetQrCode(qrBuffer, petId);
     /*
      * ถ้าเคยมี QR แต่ถูกปิดใช้งาน:
      * - สร้าง token ใหม่
@@ -102,6 +105,74 @@ export class PetQrService {
     return qrCode;
   }
 
+  async getPublicPetProfile(
+    qrToken: string,
+  ): Promise<PublicPetProfileResponseDto> {
+    const qrCode = await this.prisma.petQrCode.findUnique({
+      where: {
+        qrToken,
+      },
+      select: {
+        isActive: true,
+
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            breed: true,
+            gender: true,
+            color: true,
+            age: true,
+            distinctiveFeatures: true,
+            description: true,
+            profileImageUrl: true,
+
+            images: {
+              select: {
+                id: true,
+                imageUrl: true,
+                isProfile: true,
+                sortOrder: true,
+              },
+              orderBy: {
+                sortOrder: 'asc',
+              },
+            },
+
+            owner: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                lineId: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!qrCode || !qrCode.isActive) {
+      throw new NotFoundException(
+        'Pet profile not found or QR code is inactive',
+      );
+    }
+
+    const { owner, ...pet } = qrCode.pet;
+
+    return {
+      ...pet,
+      ownerContact: {
+        name: `${owner.firstName} ${owner.lastName}`.trim(),
+        phone: owner.phone,
+        lineId: owner.lineId,
+        email: owner.email,
+      },
+    };
+  }
+
   //ส่วนย่อย
 
   //สร้างข้อมูลสุ่ม 32 bytes
@@ -116,8 +187,9 @@ export class PetQrService {
     return `${frontendUrl.replace(/\/$/, '')}/pet/qr/${qrToken}`;
   }
 
-  private generateQrImage(publicProfileUrl: string): Promise<string> {
-    return QRCode.toDataURL(publicProfileUrl, {
+  private generateQrImage(publicProfileUrl: string): Promise<Buffer> {
+    return QRCode.toBuffer(publicProfileUrl, {
+      type: 'png',
       errorCorrectionLevel: 'H',
       margin: 2,
       width: 512,
