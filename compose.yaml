@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: pawnd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: project_final_group
+    ports:
+      - '5433:5432'
