@@ -82,6 +82,16 @@ enum PostStatus {
   @@map("post_status")
 }
 
+enum PostEventType {
+  POST_CREATED
+  AI_MATCHES_FOUND
+  AI_MATCH_CONFIRMED
+  REUNITED
+  POST_CLOSED
+
+  @@map("post_event_type")
+}
+
 enum NotificationType {
   AI_MATCH
   NEW_MESSAGE
@@ -377,14 +387,14 @@ model AiMatch {
 }
 
 model PostEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  postId      String   @map("post_id") @db.Uuid
-  createdBy   String?  @map("created_by") @db.Uuid
-  eventType   String   @map("event_type") @db.VarChar(100)
+  id          String        @id @default(uuid()) @db.Uuid
+  postId      String        @map("post_id") @db.Uuid
+  createdBy   String?       @map("created_by") @db.Uuid
+  eventType   PostEventType @map("event_type")
   description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  post        PetPost  @relation(fields: [postId], references: [id])
-  creator     User?    @relation(fields: [createdBy], references: [id])
+  createdAt   DateTime      @default(now()) @map("created_at")
+  post        PetPost       @relation(fields: [postId], references: [id])
+  creator     User?         @relation(fields: [createdBy], references: [id])
 
   @@index([postId])
   @@index([createdAt])
