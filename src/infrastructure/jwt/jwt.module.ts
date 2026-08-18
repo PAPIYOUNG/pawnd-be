@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule as NestJwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { EnvVariableType } from '@/config/env.validate';
 import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
+import { RefreshTokenService } from '@/infrastructure/jwt/refresh-token.service';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
       }),
     }),
   ],
-  providers: [AccessTokenService],
-  exports: [AccessTokenService],
+  providers: [AccessTokenService, RefreshTokenService],
+  exports: [AccessTokenService, RefreshTokenService],
 })
 export class JwtModule {}

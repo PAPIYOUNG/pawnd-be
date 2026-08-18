@@ -134,6 +134,8 @@ model User {
   updatedAt               DateTime             @updatedAt @map("updated_at")
   authAccounts            AuthAccount[]
   emailVerifications      EmailVerification[]
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
   pets                    Pet[]
   petPosts                PetPost[]
   postEvents              PostEvent[]
@@ -186,6 +188,34 @@ model EmailVerification {
   @@index([email])
   @@index([expiresAt])
   @@map("email_verifications")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 model Pet {
@@ -309,7 +339,7 @@ model PostImage {
 model ImageEmbedding {
   id           String                @id @default(uuid()) @db.Uuid
   postImageId  String                @map("post_image_id") @db.Uuid
-  embedding    Unsupported("vector")
+  embedding    Unsupported("vector") //Unsupported เพราะ PostgreSQL รู้จัก vector ผ่าน pgvector แต่ Prisma ยังไม่รองรับชนิด vector โดยตรง
   modelName    String                @map("model_name") @db.VarChar(100)
   modelVersion String?               @map("model_version") @db.VarChar(50)
   dimension    Int
