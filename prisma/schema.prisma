@@ -130,12 +130,14 @@ model User {
   emailVerifiedAt         DateTime?            @map("email_verified_at")
   notificationEnabled     Boolean              @default(true) @map("notification_enabled")
   twoFactorEnabled        Boolean              @default(true) @map("2fa_enable")
+  lastLoginAt             DateTime?            @map("last_login_at")
   createdAt               DateTime             @default(now()) @map("created_at")
   updatedAt               DateTime             @updatedAt @map("updated_at")
   authAccounts            AuthAccount[]
   emailVerifications      EmailVerification[]
   refreshTokens           RefreshToken[]
   passwordResetTokens     PasswordResetToken[]
+  twoFactorChallenges     TwoFactorChallenge[]
   pets                    Pet[]
   petPosts                PetPost[]
   postEvents              PostEvent[]
@@ -216,6 +218,21 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+model TwoFactorChallenge {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  tempTokenHash String   @unique @map("temp_token_hash") @db.VarChar(255)
+  otpHash       String   @map("otp_hash") @db.VarChar(255)
+  attempts      Int      @default(0)
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("two_factor_challenges")
 }
 
 model Pet {

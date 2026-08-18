@@ -21,9 +21,11 @@ import { RefreshTokenService } from '@/infrastructure/jwt/refresh-token.service'
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 
 const EMAIL_VERIFICATION_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
+const TWO_FACTOR_TTL_MINUTES = 5;
 
 const PASSWORD_RESET_TTL_MINUTES = 15;
 
@@ -91,6 +93,14 @@ export class AuthService {
       throw new UnauthorizedException('Account is not active');
     }
 
+    const requiresTwoFactor =
+      user.lastLoginAt === null || user.twoFactorEnabled;
+
+    if (requiresTwoFactor) {
+      const tempToken = await this.issueTwoFactorChallenge(user.id, user.email);
+      return { tempToken, message: 'OTP sent to your email' };
+    }
+
     const accessToken = await this.accessTokenService.sign({
       sub: user.id,
       email: user.email,
@@ -98,6 +108,11 @@ export class AuthService {
     });
 
     const refreshToken = await this.refreshTokenService.issue(user.id);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     return {
       accessToken,
@@ -310,5 +325,111 @@ export class AuthService {
       subject: 'Verify your Pawnd account',
       text: `Your verification code: ${otp}`,
     });
+  }
+
+  async verifyTwoFactor(dto: VerifyTwoFactorDto) {
+    const challenge = await this.prisma.twoFactorChallenge.findFirst({
+      where: {
+        tempTokenHash: hashToken(dto.tempToken),
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!challenge) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const isMatch = challenge.otpHash === hashToken(dto.otp);
+
+    if (!isMatch) {
+      const attempts = challenge.attempts + 1;
+
+      if (attempts >= MAX_OTP_ATTEMPTS) {
+        await this.prisma.twoFactorChallenge.delete({
+          where: { id: challenge.id },
+        });
+      } else {
+        await this.prisma.twoFactorChallenge.update({
+          where: { id: challenge.id },
+          data: { attempts },
+        });
+      }
+
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    await this.prisma.twoFactorChallenge.delete({
+      where: { id: challenge.id },
+    });
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const accessToken = await this.accessTokenService.sign({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const refreshToken = await this.refreshTokenService.issue(user.id);
+
+    return { accessToken, refreshToken };
+  }
+
+  private async issueTwoFactorChallenge(
+    userId: string,
+    email: string,
+  ): Promise<string> {
+    const tempToken = generateToken();
+    const otp = generateOtp();
+
+    await this.prisma.twoFactorChallenge.deleteMany({
+      where: { userId },
+    });
+
+    await this.prisma.twoFactorChallenge.create({
+      data: {
+        userId,
+        tempTokenHash: hashToken(tempToken),
+        otpHash: hashToken(otp),
+        expiresAt: new Date(Date.now() + TWO_FACTOR_TTL_MINUTES * 60 * 1000),
+      },
+    });
+
+    await this.mailService.send({
+      to: email,
+      subject: 'Your Pawnd login code',
+      text: `Your login verification code: ${otp}`,
+    });
+
+    return tempToken;
+  }
+
+  async enableTwoFactor(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: true },
+    });
+
+    return { message: '2FA enabled successfully' };
+  }
+
+  async disableTwoFactor(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false },
+    });
+
+    return { message: '2FA disabled successfully' };
   }
 }

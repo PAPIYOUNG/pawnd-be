@@ -16,6 +16,7 @@ import { LoginDto } from '@/auth/dto/login.dto';
 import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
+import { VerifyTwoFactorDto } from '@/auth/dto/verify-2fa.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -79,5 +80,24 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/verify')
+  async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
+    return this.authService.verifyTwoFactor(dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/enable')
+  async enableTwoFactor(@CurrentUser('sub') userId: string) {
+    return this.authService.enableTwoFactor(userId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/disable')
+  async disableTwoFactor(@CurrentUser('sub') userId: string) {
+    return this.authService.disableTwoFactor(userId);
   }
 }
