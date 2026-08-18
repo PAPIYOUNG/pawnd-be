@@ -5,9 +5,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthGuard } from '@/auth/guards/auth.guard';
 import { RoleGuard } from '@/auth/guards/role.guard';
 import { AuthModule } from '@/auth/auth.module';
-import { DatabaseModule } from '@/database/database.module';
 import { JwtModule } from '@/infrastructure/jwt/jwt.module';
-import { PetModule } from '@/pet/pet.module';
 
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
@@ -15,10 +13,8 @@ import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validate }),
-    DatabaseModule,
     AuthModule,
     JwtModule,
-    PetModule,
   ],
   controllers: [],
   providers: [
