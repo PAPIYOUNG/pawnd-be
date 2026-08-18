@@ -22,6 +22,9 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
+import { UserRole, UserStatus } from '@/database/generated/prisma/enums';
+import { GoogleAuthService } from '@/infrastructure/google/google-auth.service';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 const EMAIL_VERIFICATION_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
@@ -37,6 +40,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly accessTokenService: AccessTokenService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly googleAuthService: GoogleAuthService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -93,6 +97,20 @@ export class AuthService {
       throw new UnauthorizedException('Account is not active');
     }
 
+    return this.completeLogin(user);
+  }
+
+  private async completeLogin(user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    firstName: string;
+    lastName: string;
+    status: UserStatus;
+    avatarUrl: string | null;
+    lastLoginAt: Date | null;
+    twoFactorEnabled: boolean;
+  }) {
     const requiresTwoFactor =
       user.lastLoginAt === null || user.twoFactorEnabled;
 
@@ -127,6 +145,62 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
       },
     };
+  }
+
+  async loginWithGoogle(dto: GoogleLoginDto) {
+    const payload = await this.googleAuthService.verifyIdToken(dto.idToken);
+
+    const email = payload.email as string;
+    const googleId = payload.sub as string;
+
+    let user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          firstName: payload.given_name ?? 'Google',
+          lastName: payload.family_name ?? 'User',
+          email,
+          avatarUrl: payload.picture,
+          authAccounts: {
+            create: {
+              provider: 'GOOGLE',
+              providerAccountId: googleId,
+            },
+          },
+        },
+      });
+
+      await this.sendVerificationEmail(user.id, user.email);
+
+      return { message: 'Registration successful, please verify your email' };
+    }
+
+    const linkedAccount = await this.prisma.authAccount.findFirst({
+      where: { userId: user.id, provider: 'GOOGLE' },
+    });
+
+    if (!linkedAccount) {
+      await this.prisma.authAccount.create({
+        data: {
+          userId: user.id,
+          provider: 'GOOGLE',
+          providerAccountId: googleId,
+        },
+      });
+    }
+
+    if (user.status === 'PENDING_EMAIL_VERIFICATION') {
+      throw new UnauthorizedException(
+        'Please verify your email before logging in',
+      );
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    return this.completeLogin(user);
   }
 
   async getMe(userId: string) {

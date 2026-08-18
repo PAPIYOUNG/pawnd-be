@@ -5,10 +5,11 @@ import { AuthService } from './auth.service';
 import { HashModule } from '@/infrastructure/hash/hash.module';
 import { JwtModule } from '@/infrastructure/jwt/jwt.module';
 import { MailModule } from '@/infrastructure/mail/mail.module';
+import { GoogleAuthModule } from '@/infrastructure/google/google-auth.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
-  imports: [HashModule, JwtModule, MailModule],
+  imports: [HashModule, JwtModule, MailModule, GoogleAuthModule],
 })
 export class AuthModule {}
