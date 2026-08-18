@@ -9,6 +9,7 @@ describe('PetController', () => {
 
   const mockPetService = {
     createPet: jest.fn(),
+    listMyPets: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -62,6 +63,34 @@ describe('PetController', () => {
       const result = await controller.createPet(ownerId, dto);
 
       expect(mockPetService.createPet).toHaveBeenCalledWith(ownerId, dto);
+      expect(result).toEqual(expectedResponse);
+    });
+  });
+
+  describe('listMyPets', () => {
+    it('should call petService.listMyPets with current user id and return pets list', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const expectedResponse = {
+        pets: [
+          {
+            id: '660e8400-e29b-41d4-a716-446655440001',
+            name: 'Milo',
+            type: PetType.DOG,
+            breed: 'Golden Retriever',
+            gender: PetGender.MALE,
+            profileImageUrl: 'https://example.com/milo.jpg',
+            qrCode: {
+              qrToken: 'qr-token-12345',
+            },
+          },
+        ],
+      };
+
+      mockPetService.listMyPets.mockResolvedValue(expectedResponse);
+
+      const result = await controller.listMyPets(ownerId);
+
+      expect(mockPetService.listMyPets).toHaveBeenCalledWith(ownerId);
       expect(result).toEqual(expectedResponse);
     });
   });

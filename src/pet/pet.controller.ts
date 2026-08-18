@@ -1,5 +1,12 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { PetService } from './pet.service';
 
@@ -14,5 +21,10 @@ export class PetController {
     @Body() createPetDto: CreatePetDto,
   ) {
     return this.petService.createPet(ownerId, createPetDto);
+  }
+
+  @Get()
+  async listMyPets(@CurrentUser('sub') ownerId: string) {
+    return this.petService.listMyPets(ownerId);
   }
 }

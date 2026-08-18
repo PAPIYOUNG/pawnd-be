@@ -35,4 +35,26 @@ export class PetService {
 
     return { pet };
   }
+
+  async listMyPets(ownerId: string) {
+    const pets = await this.prisma.pet.findMany({
+      where: { ownerId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        breed: true,
+        gender: true,
+        profileImageUrl: true,
+        qrCode: {
+          select: {
+            qrToken: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { pets };
+  }
 }

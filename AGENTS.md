@@ -135,15 +135,15 @@ docker exec -it pawnd-postgres psql -U postgres -d pawnd_project \
 1. คัดลอก `.env.example` → `.env`
 2. ใส่ค่าตามตารางด้านล่าง
 
-| ตัวแปร | คำอธิบาย | ตัวอย่าง / หมายเหตุ |
-|---|---|---|
-| `PORT` | พอร์ตที่ server listen | `8000` |
-| `DATABASE_URL` | Connection string (**ต้อง URL-encode สัญลักษณ์พิเศษในรหัสผ่าน** เช่น `@` → `%40`) | `postgresql://postgres:pass%40word@localhost:5433/pawnd_project?schema=public` |
-| `JWT_SECRET` | Secret key สำหรับ sign JWT — **ต้องยาวอย่างน้อย 32 ตัวอักษร** | ใช้ `openssl rand -hex 32` สร้างได้ |
-| `JWT_EXPIRE_IN` | อายุ token **หน่วยวินาที** | `86400` = 1 วัน |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | สมัคร free tier หรือใส่ dummy สำหรับ dev ที่ยังไม่ต้อง upload |
-| `CLOUDINARY_API_KEY` | Cloudinary API key | เช่นเดียวกัน |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret | เช่นเดียวกัน |
+| ตัวแปร                  | คำอธิบาย                                                                          | ตัวอย่าง / หมายเหตุ                                                            |
+| ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `PORT`                  | พอร์ตที่ server listen                                                            | `8000`                                                                         |
+| `DATABASE_URL`          | Connection string (**ต้อง URL-encode สัญลักษณ์พิเศษในรหัสผ่าน** เช่น `@` → `%40`) | `postgresql://postgres:pass%40word@localhost:5433/pawnd_project?schema=public` |
+| `JWT_SECRET`            | Secret key สำหรับ sign JWT — **ต้องยาวอย่างน้อย 32 ตัวอักษร**                     | ใช้ `openssl rand -hex 32` สร้างได้                                            |
+| `JWT_EXPIRE_IN`         | อายุ token **หน่วยวินาที**                                                        | `86400` = 1 วัน                                                                |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name                                                             | สมัคร free tier หรือใส่ dummy สำหรับ dev ที่ยังไม่ต้อง upload                  |
+| `CLOUDINARY_API_KEY`    | Cloudinary API key                                                                | เช่นเดียวกัน                                                                   |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret                                                             | เช่นเดียวกัน                                                                   |
 
 > ⚠️ **ห้าม commit ไฟล์ `.env`** — มีอยู่ใน `.gitignore` แล้ว หากเพิ่มตัวแปรใหม่ ให้อัปเดต `.env.example` เท่านั้น
 
@@ -688,4 +688,3 @@ Commit:
 - หาก rule ใหม่มีผลกับ feature เดิม ให้ระบุ migration/compatibility impact
 - ห้าม AI เปลี่ยนข้อห้าม Git, security rule หรือ business rule สำคัญเอง
 - เอกสารนี้ไม่แทน Swagger, Prisma schema, ticket หรือ test แต่ทำหน้าที่เชื่อมทุกส่วนให้ทีมทำงานในแนวทางเดียวกัน
-
