@@ -8,7 +8,11 @@ import { PrismaService } from '@/database/prisma.service';
 import { BcryptService } from '@/infrastructure/hash/bcrypt.service';
 import { MailService } from '@/infrastructure/mail/mail.service';
 import { RegisterDto } from '@/auth/dto/register.dto';
-import { generateToken, hashToken } from '@/common/utils/token.util';
+import {
+  generateOtp,
+  generateToken,
+  hashToken,
+} from '@/common/utils/token.util';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { LoginDto } from './dto/login.dto';
@@ -18,7 +22,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 
-const EMAIL_VERIFICATION_TTL_MINUTES = 15;
+const EMAIL_VERIFICATION_TTL_MINUTES = 5;
+const MAX_OTP_ATTEMPTS = 3;
 
 const PASSWORD_RESET_TTL_MINUTES = 15;
 
@@ -92,10 +97,7 @@ export class AuthService {
       role: user.role,
     });
 
-    const refreshToken = await this.refreshTokenService.issue(
-      user.id,
-      dto.rememberMe,
-    );
+    const refreshToken = await this.refreshTokenService.issue(user.id);
 
     return {
       accessToken,
@@ -226,20 +228,37 @@ export class AuthService {
   async verifyEmail(dto: VerifyEmailDto) {
     const verification = await this.prisma.emailVerification.findFirst({
       where: {
-        otpHash: hashToken(dto.token),
-        verifiedAt: null,
+        email: dto.email,
         expiresAt: { gt: new Date() },
       },
     });
 
     if (!verification) {
-      throw new BadRequestException('Invalid or expired verification token');
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const isMatch = verification.otpHash === hashToken(dto.otp);
+
+    if (!isMatch) {
+      const attempts = verification.attempts + 1;
+
+      if (attempts >= MAX_OTP_ATTEMPTS) {
+        await this.prisma.emailVerification.delete({
+          where: { id: verification.id },
+        });
+      } else {
+        await this.prisma.emailVerification.update({
+          where: { id: verification.id },
+          data: { attempts },
+        });
+      }
+
+      throw new BadRequestException('Invalid or expired verification code');
     }
 
     await this.prisma.$transaction([
-      this.prisma.emailVerification.update({
+      this.prisma.emailVerification.delete({
         where: { id: verification.id },
-        data: { verifiedAt: new Date() },
       }),
       this.prisma.user.update({
         where: { id: verification.userId },
@@ -269,13 +288,17 @@ export class AuthService {
   }
 
   private async sendVerificationEmail(userId: string, email: string) {
-    const token = generateToken();
+    const otp = generateOtp();
+
+    await this.prisma.emailVerification.deleteMany({
+      where: { email },
+    });
 
     await this.prisma.emailVerification.create({
       data: {
         userId,
         email,
-        otpHash: hashToken(token),
+        otpHash: hashToken(otp),
         expiresAt: new Date(
           Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60 * 1000,
         ),
@@ -285,7 +308,7 @@ export class AuthService {
     await this.mailService.send({
       to: email,
       subject: 'Verify your Pawnd account',
-      text: `Your verification token: ${token}`,
+      text: `Your verification code: ${otp}`,
     });
   }
 }
