@@ -1,0 +1,425 @@
+import { EmbeddingService } from '@/ai/service/embedding.service';
+import { AiMatch } from '@/database/generated/prisma/client';
+import { PostStatus, PostType } from '@/database/generated/prisma/enums';
+import { PrismaService } from '@/database/prisma.service';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+@Injectable()
+export class AiMatchingService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly embeddingService: EmbeddingService,
+  ) {}
+
+  async matchPost(postId: string) {
+    // 1. หา post ต้นทาง
+    const sourcePost = await this.prisma.petPost.findUnique({
+      where: {
+        id: postId,
+      },
+      include: {
+        images: true,
+      },
+    });
+
+    if (!sourcePost) {
+      throw new NotFoundException('Post not found');
+    }
+
+    // 2. Match ได้เฉพาะ post ที่ ACTIVE
+    if (sourcePost.status !== PostStatus.ACTIVE) {
+      throw new BadRequestException('Only active posts can be matched');
+    }
+
+    // 3. LOST ต้องหา FOUND / FOUND ต้องหา LOST
+    const oppositeType =
+      sourcePost.type === PostType.LOST ? PostType.FOUND : PostType.LOST;
+
+    // 4. หา candidate
+    const candidates = await this.prisma.petPost.findMany({
+      where: {
+        id: {
+          not: sourcePost.id,
+        },
+
+        type: oppositeType,
+
+        status: PostStatus.ACTIVE,
+
+        // อย่างน้อยต้องเป็นสัตว์ประเภทเดียวกัน
+        petType: sourcePost.petType,
+      },
+
+      include: {
+        images: true,
+      },
+    });
+
+    const results: AiMatch[] = [];
+
+    // 5. คำนวณคะแนน candidate แต่ละตัว
+    for (const candidate of candidates) {
+      const vectorSimilarity = await this.calculateVectorSimilarity(
+        sourcePost.id,
+        candidate.id,
+      );
+
+      const featureScore = this.calculateFeatureScore(sourcePost, candidate);
+
+      const { score: locationScore, distanceKm } = this.calculateLocationScore(
+        Number(sourcePost.latitude),
+        Number(sourcePost.longitude),
+        Number(candidate.latitude),
+        Number(candidate.longitude),
+      );
+
+      const dateScore = this.calculateDateScore(
+        sourcePost.eventDate,
+        candidate.eventDate,
+      );
+
+      const finalScore = this.calculateFinalScore({
+        vectorSimilarity,
+        featureScore,
+        locationScore,
+        dateScore,
+      });
+
+      // Match threshold รอบแรก 50%
+      if (finalScore < 0.5) {
+        continue;
+      }
+
+      // ai_matches บังคับให้รู้ว่าอันไหน LOST / FOUND
+      const lostPostId =
+        sourcePost.type === PostType.LOST ? sourcePost.id : candidate.id;
+
+      const foundPostId =
+        sourcePost.type === PostType.FOUND ? sourcePost.id : candidate.id;
+
+      // 6. ถ้า match เดิมมีแล้ว update
+      // ถ้ายังไม่มีให้ create
+      const match = await this.prisma.aiMatch.upsert({
+        where: {
+          lostPostId_foundPostId: {
+            lostPostId,
+            foundPostId,
+          },
+        },
+
+        create: {
+          lostPostId,
+          foundPostId,
+
+          vectorSimilarity,
+          featureScore,
+          locationScore,
+          dateScore,
+
+          finalScore,
+          distanceKm,
+
+          modelName: 'PAWND_MATCHING_V1',
+          modelVersion: '1.0',
+        },
+
+        update: {
+          vectorSimilarity,
+          featureScore,
+          locationScore,
+          dateScore,
+
+          finalScore,
+          distanceKm,
+
+          modelName: 'PAWND_MATCHING_V1',
+          modelVersion: '1.0',
+        },
+      });
+
+      results.push(match);
+    }
+
+    // 7. เรียง match จากคะแนนสูง → ต่ำ
+    results.sort((a, b) => Number(b.finalScore) - Number(a.finalScore));
+
+    return {
+      postId,
+      totalCandidates: candidates.length,
+      totalMatches: results.length,
+      matches: results,
+    };
+  }
+
+  // =========================================================
+  // VECTOR SIMILARITY
+  // =========================================================
+
+  private async calculateVectorSimilarity(
+    sourcePostId: string,
+    candidatePostId: string,
+  ): Promise<number> {
+    return this.embeddingService.calculatePostSimilarity(
+      sourcePostId,
+      candidatePostId,
+    );
+  }
+
+  // =========================================================
+  // FEATURE SCORE
+  // =========================================================
+
+  private calculateFeatureScore(
+    source: {
+      breed: string | null;
+      color: string | null;
+      distinctiveFeatures: string | null;
+    },
+
+    candidate: {
+      breed: string | null;
+      color: string | null;
+      distinctiveFeatures: string | null;
+    },
+  ): number {
+    let score = 0;
+    let weight = 0;
+
+    // -------------------------
+    // Breed = 35%
+    // -------------------------
+
+    if (source.breed && candidate.breed) {
+      weight += 0.35;
+
+      if (this.normalize(source.breed) === this.normalize(candidate.breed)) {
+        score += 0.35;
+      }
+    }
+
+    // -------------------------
+    // Color = 35%
+    // -------------------------
+
+    if (source.color && candidate.color) {
+      weight += 0.35;
+
+      if (this.hasTextOverlap(source.color, candidate.color)) {
+        score += 0.35;
+      }
+    }
+
+    // -------------------------
+    // Distinctive Features = 30%
+    // -------------------------
+
+    if (source.distinctiveFeatures && candidate.distinctiveFeatures) {
+      weight += 0.3;
+
+      if (
+        this.hasTextOverlap(
+          source.distinctiveFeatures,
+          candidate.distinctiveFeatures,
+        )
+      ) {
+        score += 0.3;
+      }
+    }
+
+    // ไม่มี feature สำหรับเทียบเลย
+    if (weight === 0) {
+      return 0;
+    }
+
+    /*
+     * Normalize ตามข้อมูลที่มีจริง
+     *
+     * ตัวอย่าง:
+     * มีแค่ breed และ color
+     * weight = 0.70
+     *
+     * ถ้าตรงทั้งหมด:
+     * score = 0.70
+     *
+     * 0.70 / 0.70 = 1
+     */
+    return this.clamp(score / weight);
+  }
+
+  // =========================================================
+  // LOCATION SCORE
+  // =========================================================
+
+  private calculateLocationScore(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): {
+    score: number;
+    distanceKm: number;
+  } {
+    const distanceKm = this.calculateDistanceKm(lat1, lon1, lat2, lon2);
+
+    let score: number;
+
+    if (distanceKm <= 1) {
+      score = 1;
+    } else if (distanceKm <= 3) {
+      score = 0.9;
+    } else if (distanceKm <= 5) {
+      score = 0.8;
+    } else if (distanceKm <= 10) {
+      score = 0.6;
+    } else if (distanceKm <= 20) {
+      score = 0.3;
+    } else {
+      score = 0.1;
+    }
+
+    return {
+      score,
+      distanceKm,
+    };
+  }
+
+  // =========================================================
+  // DATE SCORE
+  // =========================================================
+
+  private calculateDateScore(sourceDate: Date, candidateDate: Date): number {
+    const milliseconds = Math.abs(
+      sourceDate.getTime() - candidateDate.getTime(),
+    );
+
+    const days = milliseconds / (1000 * 60 * 60 * 24);
+
+    if (days <= 1) {
+      return 1;
+    }
+
+    if (days <= 3) {
+      return 0.9;
+    }
+
+    if (days <= 7) {
+      return 0.7;
+    }
+
+    if (days <= 14) {
+      return 0.5;
+    }
+
+    if (days <= 30) {
+      return 0.3;
+    }
+
+    return 0.1;
+  }
+
+  // =========================================================
+  // FINAL SCORE
+  // =========================================================
+
+  private calculateFinalScore(input: {
+    vectorSimilarity: number;
+    featureScore: number;
+    locationScore: number;
+    dateScore: number;
+  }): number {
+    /**
+     * Weight V1
+     *
+     * Vector Similarity = 50%
+     * Feature           = 20%
+     * Location          = 20%
+     * Date              = 10%
+     */
+
+    const score =
+      input.vectorSimilarity * 0.5 +
+      input.featureScore * 0.2 +
+      input.locationScore * 0.2 +
+      input.dateScore * 0.1;
+
+    return this.clamp(score);
+  }
+
+  // =========================================================
+  // HAVERSINE DISTANCE
+  // =========================================================
+
+  private calculateDistanceKm(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const earthRadiusKm = 6371;
+
+    const dLat = this.toRadians(lat2 - lat1);
+
+    const dLon = this.toRadians(lon2 - lon1);
+
+    const latitude1 = this.toRadians(lat1);
+
+    const latitude2 = this.toRadians(lat2);
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(latitude1) *
+        Math.cos(latitude2) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  }
+
+  private toRadians(degree: number): number {
+    return degree * (Math.PI / 180);
+  }
+
+  // =========================================================
+  // TEXT HELPERS
+  // =========================================================
+
+  private normalize(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private hasTextOverlap(value1: string, value2: string): boolean {
+    const first = this.normalize(value1);
+    const second = this.normalize(value2);
+
+    // ถ้าข้อความหนึ่งอยู่ในอีกข้อความหนึ่ง
+    if (first.includes(second) || second.includes(first)) {
+      return true;
+    }
+
+    const words1 = new Set(first.split(/\s+/));
+
+    const words2 = new Set(second.split(/\s+/));
+
+    for (const word of words1) {
+      if (word.length >= 3 && words2.has(word)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // =========================================================
+  // SCORE HELPER
+  // =========================================================
+
+  private clamp(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+}

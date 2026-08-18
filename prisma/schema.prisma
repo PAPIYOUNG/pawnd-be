@@ -344,15 +344,16 @@ model PostImage {
 }
 
 model ImageEmbedding {
-  id           String                @id @default(uuid()) @db.Uuid
-  postImageId  String                @map("post_image_id") @db.Uuid
-  embedding    Unsupported("vector") //Unsupported เพราะ PostgreSQL รู้จัก vector ผ่าน pgvector แต่ Prisma ยังไม่รองรับชนิด vector โดยตรง
-  modelName    String                @map("model_name") @db.VarChar(100)
-  modelVersion String?               @map("model_version") @db.VarChar(50)
+  id           String                     @id @default(uuid()) @db.Uuid
+  postImageId  String                     @map("post_image_id") @db.Uuid
+  embedding    Unsupported("vector(768)")
+  modelName    String                     @map("model_name") @db.VarChar(100)
+  modelVersion String?                    @map("model_version") @db.VarChar(50)
   dimension    Int
-  createdAt    DateTime              @default(now()) @map("created_at")
-  postImage    PostImage             @relation(fields: [postImageId], references: [id])
+  createdAt    DateTime                   @default(now()) @map("created_at")
+  postImage    PostImage                  @relation(fields: [postImageId], references: [id])
 
+  @@unique([postImageId, modelName])
   @@index([postImageId])
   @@map("image_embeddings")
 }
