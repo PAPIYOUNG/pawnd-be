@@ -1,10 +1,19 @@
 import { PrismaService } from '@/database/prisma.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreatePetDto } from './dto/create-pet.dto';
+import { UpdatePetDto } from './dto/update-pet.dto';
 
 @Injectable()
 export class PetService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) {}
 
   async createPet(ownerId: string, dto: CreatePetDto) {
     const pet = await this.prisma.pet.create({
@@ -101,5 +110,193 @@ export class PetService {
     }
 
     return { pet };
+  }
+
+  async updatePet(ownerId: string, petId: string, dto: UpdatePetDto) {
+    const existing = await this.prisma.pet.findFirst({
+      where: { id: petId, ownerId },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    const pet = await this.prisma.pet.update({
+      where: { id: petId },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.type !== undefined && { type: dto.type }),
+        ...(dto.breed !== undefined && { breed: dto.breed }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
+        ...(dto.color !== undefined && { color: dto.color }),
+        ...(dto.age !== undefined && { age: dto.age }),
+        ...(dto.distinctiveFeatures !== undefined && {
+          distinctiveFeatures: dto.distinctiveFeatures,
+        }),
+        ...(dto.description !== undefined && { description: dto.description }),
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        breed: true,
+        gender: true,
+        color: true,
+        age: true,
+        updatedAt: true,
+      },
+    });
+
+    return { pet };
+  }
+
+  async deletePet(ownerId: string, petId: string) {
+    const existing = await this.prisma.pet.findFirst({
+      where: { id: petId, ownerId },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.petImage.deleteMany({ where: { petId } });
+      await tx.petQrCode.deleteMany({ where: { petId } });
+      await tx.pet.delete({ where: { id: petId } });
+    });
+
+    return { message: 'Pet deleted successfully' };
+  }
+
+  async uploadPetImages(
+    ownerId: string,
+    petId: string,
+    files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No images provided');
+    }
+
+    const pet = await this.prisma.pet.findFirst({
+      where: { id: petId, ownerId },
+      include: {
+        images: {
+          orderBy: { sortOrder: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    const startSortOrder =
+      pet.images.length > 0 ? pet.images[0].sortOrder + 1 : 0;
+    const uploadedImagesData: {
+      imageUrl: string;
+      sortOrder: number;
+      isProfile: boolean;
+    }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const imageUrl = await this.cloudinaryService.upload(file);
+      const isProfile = !pet.profileImageUrl && i === 0;
+      uploadedImagesData.push({
+        imageUrl,
+        sortOrder: startSortOrder + i,
+        isProfile,
+      });
+    }
+
+    const createdImages = await this.prisma.$transaction(async (tx) => {
+      const results: {
+        id: string;
+        petId: string;
+        imageUrl: string;
+        isProfile: boolean;
+        sortOrder: number;
+      }[] = [];
+      for (const data of uploadedImagesData) {
+        const img = await tx.petImage.create({
+          data: {
+            petId,
+            imageUrl: data.imageUrl,
+            sortOrder: data.sortOrder,
+            isProfile: data.isProfile,
+          },
+          select: {
+            id: true,
+            petId: true,
+            imageUrl: true,
+            isProfile: true,
+            sortOrder: true,
+          },
+        });
+        results.push(img);
+      }
+
+      if (!pet.profileImageUrl && uploadedImagesData.length > 0) {
+        await tx.pet.update({
+          where: { id: petId },
+          data: { profileImageUrl: uploadedImagesData[0].imageUrl },
+        });
+      }
+
+      return results;
+    });
+
+    return { images: createdImages };
+  }
+
+  async deletePetImage(ownerId: string, petId: string, imageId: string) {
+    const pet = await this.prisma.pet.findFirst({
+      where: { id: petId, ownerId },
+      select: { id: true, profileImageUrl: true },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    const image = await this.prisma.petImage.findFirst({
+      where: { id: imageId, petId },
+    });
+
+    if (!image) {
+      throw new NotFoundException('Image not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.petImage.delete({ where: { id: imageId } });
+
+      if (image.isProfile || pet.profileImageUrl === image.imageUrl) {
+        const nextImage = await tx.petImage.findFirst({
+          where: { petId },
+          orderBy: { sortOrder: 'asc' },
+        });
+
+        if (nextImage) {
+          await tx.petImage.update({
+            where: { id: nextImage.id },
+            data: { isProfile: true },
+          });
+          await tx.pet.update({
+            where: { id: petId },
+            data: { profileImageUrl: nextImage.imageUrl },
+          });
+        } else {
+          await tx.pet.update({
+            where: { id: petId },
+            data: { profileImageUrl: null },
+          });
+        }
+      }
+    });
+
+    return { message: 'Image deleted successfully' };
   }
 }

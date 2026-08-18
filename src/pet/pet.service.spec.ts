@@ -1,8 +1,10 @@
 import { PetGender, PetType } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
-import { NotFoundException } from '@nestjs/common';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreatePetDto } from './dto/create-pet.dto';
+import { UpdatePetDto } from './dto/update-pet.dto';
 import { PetService } from './pet.service';
 
 describe('PetService', () => {
@@ -13,7 +15,26 @@ describe('PetService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     },
+    petImage: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    petQrCode: {
+      deleteMany: jest.fn(),
+    },
+    $transaction: jest.fn(async (cb: (tx: any) => Promise<any>) =>
+      cb(mockPrismaService),
+    ),
+  };
+
+  const mockCloudinaryService = {
+    upload: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -23,6 +44,10 @@ describe('PetService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: CloudinaryService,
+          useValue: mockCloudinaryService,
         },
       ],
     }).compile();
@@ -245,6 +270,233 @@ describe('PetService', () => {
       await expect(service.getPetDetail(ownerId, petId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updatePet', () => {
+    it('should update pet successfully when owner matches', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const dto: UpdatePetDto = {
+        name: 'Milo Updated',
+        age: 4,
+      };
+
+      const mockUpdatedPet = {
+        id: petId,
+        name: 'Milo Updated',
+        type: PetType.DOG,
+        breed: 'Golden Retriever',
+        gender: PetGender.MALE,
+        color: 'Golden',
+        age: 4,
+        updatedAt: new Date(),
+      };
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+      mockPrismaService.pet.update.mockResolvedValue(mockUpdatedPet);
+
+      const result = await service.updatePet(ownerId, petId, dto);
+
+      expect(mockPrismaService.pet.findFirst).toHaveBeenCalledWith({
+        where: { id: petId, ownerId },
+        select: { id: true },
+      });
+      expect(mockPrismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: petId },
+        data: {
+          name: dto.name,
+          age: dto.age,
+        },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          breed: true,
+          gender: true,
+          color: true,
+          age: true,
+          updatedAt: true,
+        },
+      });
+
+      expect(result).toEqual({ pet: mockUpdatedPet });
+    });
+
+    it('should throw NotFoundException if pet not found on update', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updatePet(ownerId, petId, { name: 'New' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deletePet', () => {
+    it('should delete pet and associated relations successfully', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+
+      const result = await service.deletePet(ownerId, petId);
+
+      expect(mockPrismaService.pet.findFirst).toHaveBeenCalledWith({
+        where: { id: petId, ownerId },
+        select: { id: true },
+      });
+      expect(mockPrismaService.petImage.deleteMany).toHaveBeenCalledWith({
+        where: { petId },
+      });
+      expect(mockPrismaService.petQrCode.deleteMany).toHaveBeenCalledWith({
+        where: { petId },
+      });
+      expect(mockPrismaService.pet.delete).toHaveBeenCalledWith({
+        where: { id: petId },
+      });
+      expect(result).toEqual({ message: 'Pet deleted successfully' });
+    });
+
+    it('should throw NotFoundException if pet not found on delete', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(service.deletePet(ownerId, petId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('uploadPetImages', () => {
+    it('should upload images, save records, and update profile image if needed', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const mockFiles = [
+        { buffer: Buffer.from('test1'), originalname: 'dog1.jpg' },
+      ] as Express.Multer.File[];
+
+      const mockPet = {
+        id: petId,
+        ownerId,
+        profileImageUrl: null,
+        images: [],
+      };
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(mockPet);
+      mockCloudinaryService.upload.mockResolvedValue(
+        'https://cloudinary.com/img1.jpg',
+      );
+
+      const mockCreatedImage = {
+        id: '770e8400-e29b-41d4-a716-446655440001',
+        petId,
+        imageUrl: 'https://cloudinary.com/img1.jpg',
+        isProfile: true,
+        sortOrder: 0,
+      };
+
+      mockPrismaService.petImage.create.mockResolvedValue(mockCreatedImage);
+
+      const result = await service.uploadPetImages(ownerId, petId, mockFiles);
+
+      expect(mockCloudinaryService.upload).toHaveBeenCalledWith(mockFiles[0]);
+      expect(mockPrismaService.petImage.create).toHaveBeenCalledWith({
+        data: {
+          petId,
+          imageUrl: 'https://cloudinary.com/img1.jpg',
+          sortOrder: 0,
+          isProfile: true,
+        },
+        select: {
+          id: true,
+          petId: true,
+          imageUrl: true,
+          isProfile: true,
+          sortOrder: true,
+        },
+      });
+      expect(mockPrismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: petId },
+        data: { profileImageUrl: 'https://cloudinary.com/img1.jpg' },
+      });
+      expect(result).toEqual({ images: [mockCreatedImage] });
+    });
+
+    it('should throw BadRequestException if files array is empty', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+
+      await expect(
+        service.uploadPetImages(ownerId, petId, []),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if pet not found on upload', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const mockFiles = [{ buffer: Buffer.from('test') }] as Express.Multer.File[];
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.uploadPetImages(ownerId, petId, mockFiles),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deletePetImage', () => {
+    it('should delete pet image successfully', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({
+        id: petId,
+        profileImageUrl: 'https://cloudinary.com/other.jpg',
+      });
+      mockPrismaService.petImage.findFirst.mockResolvedValue({
+        id: imageId,
+        petId,
+        imageUrl: 'https://cloudinary.com/img1.jpg',
+        isProfile: false,
+      });
+
+      const result = await service.deletePetImage(ownerId, petId, imageId);
+
+      expect(mockPrismaService.petImage.delete).toHaveBeenCalledWith({
+        where: { id: imageId },
+      });
+      expect(result).toEqual({ message: 'Image deleted successfully' });
+    });
+
+    it('should throw NotFoundException if pet does not exist on delete image', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deletePetImage(ownerId, petId, imageId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if image does not exist on delete image', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+      mockPrismaService.petImage.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deletePetImage(ownerId, petId, imageId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
