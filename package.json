@@ -38,6 +38,8 @@
     "class-validator": "^0.15.1",
     "cloudinary": "^2.10.0",
     "dotenv": "^17.4.2",
+    "electron-to-chromium": "1.5.407",
+    "es-module-lexer": "2.3.1",
     "multer": "^2.2.0",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
