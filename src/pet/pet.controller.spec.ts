@@ -16,6 +16,7 @@ describe('PetController', () => {
     deletePet: jest.fn(),
     uploadPetImages: jest.fn(),
     deletePetImage: jest.fn(),
+    setProfileImage: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -223,6 +224,31 @@ describe('PetController', () => {
       const result = await controller.deletePetImage(ownerId, petId, imageId);
 
       expect(mockPetService.deletePetImage).toHaveBeenCalledWith(
+        ownerId,
+        petId,
+        imageId,
+      );
+      expect(result).toEqual(expectedResponse);
+    });
+  });
+
+  describe('setProfileImage', () => {
+    it('should call petService.setProfileImage with ownerId, petId, and imageId', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+      const expectedResponse = {
+        pet: {
+          id: petId,
+          profileImageUrl: 'https://cloudinary.com/profile.jpg',
+        },
+      };
+
+      mockPetService.setProfileImage.mockResolvedValue(expectedResponse);
+
+      const result = await controller.setProfileImage(ownerId, petId, imageId);
+
+      expect(mockPetService.setProfileImage).toHaveBeenCalledWith(
         ownerId,
         petId,
         imageId,

@@ -79,4 +79,13 @@ export class PetController {
   ) {
     return this.petService.deletePetImage(ownerId, id, imageId);
   }
+
+  @Patch(':id/images/:imageId/set-profile')
+  async setProfileImage(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    return this.petService.setProfileImage(ownerId, id, imageId);
+  }
 }

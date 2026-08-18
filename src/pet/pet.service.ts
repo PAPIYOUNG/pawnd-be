@@ -299,4 +299,47 @@ export class PetService {
 
     return { message: 'Image deleted successfully' };
   }
+
+  async setProfileImage(ownerId: string, petId: string, imageId: string) {
+    const pet = await this.prisma.pet.findFirst({
+      where: { id: petId, ownerId },
+      select: { id: true },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    const image = await this.prisma.petImage.findFirst({
+      where: { id: imageId, petId },
+      select: { id: true, imageUrl: true },
+    });
+
+    if (!image) {
+      throw new NotFoundException('Image not found');
+    }
+
+    const updatedPet = await this.prisma.$transaction(async (tx) => {
+      await tx.petImage.updateMany({
+        where: { petId },
+        data: { isProfile: false },
+      });
+
+      await tx.petImage.update({
+        where: { id: imageId },
+        data: { isProfile: true },
+      });
+
+      return tx.pet.update({
+        where: { id: petId },
+        data: { profileImageUrl: image.imageUrl },
+        select: {
+          id: true,
+          profileImageUrl: true,
+        },
+      });
+    });
+
+    return { pet: updatedPet };
+  }
 }

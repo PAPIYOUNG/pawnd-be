@@ -22,6 +22,7 @@ describe('PetService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
@@ -496,6 +497,79 @@ describe('PetService', () => {
 
       await expect(
         service.deletePetImage(ownerId, petId, imageId),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('setProfileImage', () => {
+    it('should set profile image and update pet profileImageUrl successfully', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+      const mockImage = {
+        id: imageId,
+        imageUrl: 'https://cloudinary.com/new-profile.jpg',
+      };
+      const mockUpdatedPet = {
+        id: petId,
+        profileImageUrl: 'https://cloudinary.com/new-profile.jpg',
+      };
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+      mockPrismaService.petImage.findFirst.mockResolvedValue(mockImage);
+      mockPrismaService.pet.update.mockResolvedValue(mockUpdatedPet);
+
+      const result = await service.setProfileImage(ownerId, petId, imageId);
+
+      expect(mockPrismaService.pet.findFirst).toHaveBeenCalledWith({
+        where: { id: petId, ownerId },
+        select: { id: true },
+      });
+      expect(mockPrismaService.petImage.findFirst).toHaveBeenCalledWith({
+        where: { id: imageId, petId },
+        select: { id: true, imageUrl: true },
+      });
+      expect(mockPrismaService.petImage.updateMany).toHaveBeenCalledWith({
+        where: { petId },
+        data: { isProfile: false },
+      });
+      expect(mockPrismaService.petImage.update).toHaveBeenCalledWith({
+        where: { id: imageId },
+        data: { isProfile: true },
+      });
+      expect(mockPrismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: petId },
+        data: { profileImageUrl: mockImage.imageUrl },
+        select: {
+          id: true,
+          profileImageUrl: true,
+        },
+      });
+      expect(result).toEqual({ pet: mockUpdatedPet });
+    });
+
+    it('should throw NotFoundException if pet not found on setProfileImage', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.setProfileImage(ownerId, petId, imageId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if image not found on setProfileImage', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const imageId = '770e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+      mockPrismaService.petImage.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.setProfileImage(ownerId, petId, imageId),
       ).rejects.toThrow(NotFoundException);
     });
   });
