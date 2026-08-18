@@ -9,6 +9,9 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
+  OPENROUTER_API_KEY: z.string().min(1),
+  OPENROUTER_BASE_URL: z.string().min(1),
+  AI_ANALYZE_IMAGE_MODEL: z.string().min(1),
 });
 
 export function validate(config: Record<string, any>) {

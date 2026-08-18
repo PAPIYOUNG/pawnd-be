@@ -11,6 +11,7 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
 import { PetQrModule } from './pet-qr/pet-qr.module';
 import { DatabaseModule } from '@/database/database.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DatabaseModule } from '@/database/database.module';
     JwtModule,
     PetQrModule,
     DatabaseModule,
+    AiModule,
   ],
   controllers: [],
   providers: [
