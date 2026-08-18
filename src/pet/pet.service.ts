@@ -1,5 +1,5 @@
 import { PrismaService } from '@/database/prisma.service';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreatePetDto } from './dto/create-pet.dto';
 
 @Injectable()
@@ -56,5 +56,50 @@ export class PetService {
     });
 
     return { pets };
+  }
+
+  async getPetDetail(ownerId: string, petId: string) {
+    const pet = await this.prisma.pet.findFirst({
+      where: {
+        id: petId,
+        ownerId,
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        breed: true,
+        gender: true,
+        color: true,
+        age: true,
+        distinctiveFeatures: true,
+        description: true,
+        profileImageUrl: true,
+        images: {
+          select: {
+            id: true,
+            imageUrl: true,
+            isProfile: true,
+            sortOrder: true,
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
+        qrCode: {
+          select: {
+            id: true,
+            qrToken: true,
+            qrImageUrl: true,
+            publicProfileUrl: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+
+    if (!pet) {
+      throw new NotFoundException('Pet not found');
+    }
+
+    return { pet };
   }
 }

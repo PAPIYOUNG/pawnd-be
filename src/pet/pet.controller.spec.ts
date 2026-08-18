@@ -10,6 +10,7 @@ describe('PetController', () => {
   const mockPetService = {
     createPet: jest.fn(),
     listMyPets: jest.fn(),
+    getPetDetail: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -91,6 +92,42 @@ describe('PetController', () => {
       const result = await controller.listMyPets(ownerId);
 
       expect(mockPetService.listMyPets).toHaveBeenCalledWith(ownerId);
+      expect(result).toEqual(expectedResponse);
+    });
+  });
+
+  describe('getPetDetail', () => {
+    it('should call petService.getPetDetail with current user id and pet id', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const expectedResponse = {
+        pet: {
+          id: petId,
+          name: 'Milo',
+          type: PetType.DOG,
+          breed: 'Golden Retriever',
+          gender: PetGender.MALE,
+          color: 'Golden',
+          age: 3,
+          distinctiveFeatures: 'White patch on chest',
+          description: 'Friendly dog',
+          profileImageUrl: 'https://example.com/milo.jpg',
+          images: [],
+          qrCode: {
+            id: '880e8400-e29b-41d4-a716-446655440001',
+            qrToken: 'qr-token-12345',
+            qrImageUrl: 'https://example.com/qr.png',
+            publicProfileUrl: 'https://pawnd.app/qr/qr-token-12345',
+            isActive: true,
+          },
+        },
+      };
+
+      mockPetService.getPetDetail.mockResolvedValue(expectedResponse);
+
+      const result = await controller.getPetDetail(ownerId, petId);
+
+      expect(mockPetService.getPetDetail).toHaveBeenCalledWith(ownerId, petId);
       expect(result).toEqual(expectedResponse);
     });
   });

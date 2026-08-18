@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import { CreatePetDto } from './dto/create-pet.dto';
@@ -26,5 +28,13 @@ export class PetController {
   @Get()
   async listMyPets(@CurrentUser('sub') ownerId: string) {
     return this.petService.listMyPets(ownerId);
+  }
+
+  @Get(':id')
+  async getPetDetail(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.petService.getPetDetail(ownerId, id);
   }
 }

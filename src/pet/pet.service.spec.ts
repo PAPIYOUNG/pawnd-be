@@ -1,5 +1,6 @@
 import { PetGender, PetType } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreatePetDto } from './dto/create-pet.dto';
 import { PetService } from './pet.service';
@@ -11,6 +12,7 @@ describe('PetService', () => {
     pet: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
     },
   };
 
@@ -154,6 +156,95 @@ describe('PetService', () => {
       const result = await service.listMyPets(ownerId);
 
       expect(result).toEqual({ pets: [] });
+    });
+  });
+
+  describe('getPetDetail', () => {
+    it('should return pet detail with images and qrCode when found', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const mockPet = {
+        id: petId,
+        name: 'Milo',
+        type: PetType.DOG,
+        breed: 'Golden Retriever',
+        gender: PetGender.MALE,
+        color: 'Golden',
+        age: 3,
+        distinctiveFeatures: 'White patch on chest',
+        description: 'Friendly dog',
+        profileImageUrl: 'https://example.com/milo.jpg',
+        images: [
+          {
+            id: '770e8400-e29b-41d4-a716-446655440001',
+            imageUrl: 'https://example.com/img1.jpg',
+            isProfile: true,
+            sortOrder: 0,
+          },
+        ],
+        qrCode: {
+          id: '880e8400-e29b-41d4-a716-446655440001',
+          qrToken: 'qr-token-12345',
+          qrImageUrl: 'https://example.com/qr.png',
+          publicProfileUrl: 'https://pawnd.app/qr/qr-token-12345',
+          isActive: true,
+        },
+      };
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(mockPet);
+
+      const result = await service.getPetDetail(ownerId, petId);
+
+      expect(mockPrismaService.pet.findFirst).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.pet.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: petId,
+          ownerId,
+        },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          breed: true,
+          gender: true,
+          color: true,
+          age: true,
+          distinctiveFeatures: true,
+          description: true,
+          profileImageUrl: true,
+          images: {
+            select: {
+              id: true,
+              imageUrl: true,
+              isProfile: true,
+              sortOrder: true,
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
+          qrCode: {
+            select: {
+              id: true,
+              qrToken: true,
+              qrImageUrl: true,
+              publicProfileUrl: true,
+              isActive: true,
+            },
+          },
+        },
+      });
+
+      expect(result).toEqual({ pet: mockPet });
+    });
+
+    it('should throw NotFoundException if pet does not exist or does not belong to owner', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+
+      mockPrismaService.pet.findFirst.mockResolvedValue(null);
+
+      await expect(service.getPetDetail(ownerId, petId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
