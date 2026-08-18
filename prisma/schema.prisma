@@ -235,6 +235,19 @@ model TwoFactorChallenge {
   @@map("two_factor_challenges")
 }
 
+model LinePendingLink {
+  id                String   @id @default(uuid()) @db.Uuid
+  tempTokenHash     String   @unique @map("temp_token_hash") @db.VarChar(255)
+  providerAccountId String   @map("provider_account_id") @db.VarChar(255)
+  firstName         String?  @map("first_name") @db.VarChar(100)
+  avatarUrl         String?  @map("avatar_url")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("line_pending_links")
+}
+
 model Pet {
   id                  String     @id @default(uuid()) @db.Uuid
   ownerId             String     @map("owner_id") @db.Uuid

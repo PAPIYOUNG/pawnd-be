@@ -239,7 +239,7 @@ prisma/
 - ใช้ Nest exception ที่เหมาะสม เช่น `BadRequestException`, `UnauthorizedException`, `ForbiddenException`, `NotFoundException`, `ConflictException`
 - ห้ามคืน stack trace, provider error หรือรายละเอียด database ให้ client
 - ใช้ response format/interceptor กลางที่มีอยู่ ห้าม wrap response ซ้ำ
-- endpoint ใหม่ต้องสอดคล้องกับ prefix/version ที่ `main.ts` กำหนดไว้ หากยังไม่มี `setGlobalPrefix` ให้ตรวจ route ที่ใช้อยู่ก่อนตั้งชื่อ
+- endpoint ใหม่ต้องสอดคล้องกับ route/prefix ที่ระบบใช้อยู่
 
 ### 5.3 DTO และ validation
 
@@ -392,9 +392,9 @@ prisma/
 
 Endpoint ที่กำหนดไว้:
 
-- `POST /api/v1/ai/generate-description`
-- `POST /api/v1/ai/generate-description-text`
-- `POST /api/v1/ai/analyze-image`
+- `POST /ai/generate-description`
+- `POST /ai/generate-description-text`
+- `POST /ai/analyze-image`
 
 กติกา:
 
@@ -410,9 +410,9 @@ Endpoint ที่กำหนดไว้:
 
 Endpoint ที่กำหนดไว้:
 
-- `GET /api/v1/posts/:id/matches`
-- `POST /api/v1/posts/:id/match`
-- `GET /api/v1/matches/:id`
+- `GET /posts/:id/matches`
+- `POST /posts/:id/match`
+- `GET /matches/:id`
 
 Matching flow:
 

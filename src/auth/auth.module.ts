@@ -6,10 +6,17 @@ import { HashModule } from '@/infrastructure/hash/hash.module';
 import { JwtModule } from '@/infrastructure/jwt/jwt.module';
 import { MailModule } from '@/infrastructure/mail/mail.module';
 import { GoogleAuthModule } from '@/infrastructure/google/google-auth.module';
+import { LineAuthModule } from '@/infrastructure/line/line-auth.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
-  imports: [HashModule, JwtModule, MailModule, GoogleAuthModule],
+  imports: [
+    HashModule,
+    JwtModule,
+    MailModule,
+    GoogleAuthModule,
+    LineAuthModule,
+  ],
 })
 export class AuthModule {}

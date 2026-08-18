@@ -18,6 +18,8 @@ import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import { VerifyTwoFactorDto } from '@/auth/dto/verify-2fa.dto';
 import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
+import { LineLoginDto } from '@/auth/dto/line-login.dto';
+import { CompleteLineDto } from '@/auth/dto/complete-line.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -56,6 +58,20 @@ export class AuthController {
   @Post('google')
   async loginWithGoogle(@Body() dto: GoogleLoginDto) {
     return this.authService.loginWithGoogle(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('line')
+  async loginWithLine(@Body() dto: LineLoginDto) {
+    return this.authService.loginWithLine(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('line/complete')
+  async completeLineRegistration(@Body() dto: CompleteLineDto) {
+    return this.authService.completeLineRegistration(dto);
   }
 
   @Get('me')

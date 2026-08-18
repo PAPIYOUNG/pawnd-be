@@ -25,11 +25,14 @@ import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { UserRole, UserStatus } from '@/database/generated/prisma/enums';
 import { GoogleAuthService } from '@/infrastructure/google/google-auth.service';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { LineAuthService } from '@/infrastructure/line/line-auth.service';
+import { LineLoginDto } from './dto/line-login.dto';
+import { CompleteLineDto } from './dto/complete-line.dto';
 
 const EMAIL_VERIFICATION_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
 const TWO_FACTOR_TTL_MINUTES = 5;
-
+const LINE_PENDING_TTL_MINUTES = 15;
 const PASSWORD_RESET_TTL_MINUTES = 15;
 
 @Injectable()
@@ -41,6 +44,7 @@ export class AuthService {
     private readonly accessTokenService: AccessTokenService,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly googleAuthService: GoogleAuthService,
+    private readonly lineAuthService: LineAuthService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -201,6 +205,151 @@ export class AuthService {
     }
 
     return this.completeLogin(user);
+  }
+
+  async loginWithLine(dto: LineLoginDto) {
+    const profile = await this.lineAuthService.verifyCode(
+      dto.code,
+      dto.redirectUri,
+    );
+
+    const existingAccount = await this.prisma.authAccount.findFirst({
+      where: { provider: 'LINE', providerAccountId: profile.sub },
+    });
+
+    if (existingAccount) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: existingAccount.userId },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Account is not active');
+      }
+
+      if (user.status === 'PENDING_EMAIL_VERIFICATION') {
+        throw new UnauthorizedException(
+          'Please verify your email before logging in',
+        );
+      }
+
+      if (user.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Account is not active');
+      }
+
+      return this.completeLogin(user);
+    }
+
+    if (profile.email) {
+      const user = await this.prisma.user.create({
+        data: {
+          firstName: profile.name ?? 'LINE',
+          lastName: 'User',
+          email: profile.email,
+          avatarUrl: profile.picture,
+          lineId: profile.sub,
+          authAccounts: {
+            create: {
+              provider: 'LINE',
+              providerAccountId: profile.sub,
+            },
+          },
+        },
+      });
+
+      await this.sendVerificationEmail(user.id, user.email);
+
+      return { message: 'Registration successful, please verify your email' };
+    }
+
+    const tempToken = await this.issueLinePendingLink(profile);
+
+    return {
+      tempToken,
+      message: 'Please provide your email to continue',
+    };
+  }
+
+  private async issueLinePendingLink(profile: {
+    sub: string;
+    name?: string;
+    picture?: string;
+  }): Promise<string> {
+    const tempToken = generateToken();
+
+    await this.prisma.linePendingLink.create({
+      data: {
+        tempTokenHash: hashToken(tempToken),
+        providerAccountId: profile.sub,
+        firstName: profile.name,
+        avatarUrl: profile.picture,
+        expiresAt: new Date(Date.now() + LINE_PENDING_TTL_MINUTES * 60 * 1000),
+      },
+    });
+
+    return tempToken;
+  }
+
+  async completeLineRegistration(dto: CompleteLineDto) {
+    const pending = await this.prisma.linePendingLink.findFirst({
+      where: {
+        tempTokenHash: hashToken(dto.tempToken),
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!pending) {
+      throw new BadRequestException('Invalid or expired request');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingUser) {
+      await this.prisma.authAccount.create({
+        data: {
+          userId: existingUser.id,
+          provider: 'LINE',
+          providerAccountId: pending.providerAccountId,
+        },
+      });
+
+      await this.prisma.linePendingLink.delete({ where: { id: pending.id } });
+
+      if (existingUser.status === 'PENDING_EMAIL_VERIFICATION') {
+        throw new UnauthorizedException(
+          'Please verify your email before logging in',
+        );
+      }
+
+      if (existingUser.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Account is not active');
+      }
+
+      return this.completeLogin(existingUser);
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        firstName: pending.firstName ?? 'LINE',
+        lastName: 'User',
+        email: dto.email,
+        avatarUrl: pending.avatarUrl,
+        lineId: pending.providerAccountId,
+        authAccounts: {
+          create: {
+            provider: 'LINE',
+            providerAccountId: pending.providerAccountId,
+          },
+        },
+      },
+    });
+
+    await this.prisma.linePendingLink.delete({ where: { id: pending.id } });
+
+    await this.sendVerificationEmail(user.id, user.email);
+
+    return { message: 'Registration successful, please verify your email' };
   }
 
   async getMe(userId: string) {
