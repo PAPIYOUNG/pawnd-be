@@ -10,6 +10,10 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
   FRONTEND_URL: z.string().min(1),
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
+  LINE_CHANNEL_ID: z.string().min(1),
+  LINE_CHANNEL_SECRET: z.string().min(1),
 });
 
 export function validate(config: Record<string, any>) {
