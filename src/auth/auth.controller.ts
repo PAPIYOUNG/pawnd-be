@@ -16,6 +16,10 @@ import { LoginDto } from '@/auth/dto/login.dto';
 import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
+import { VerifyTwoFactorDto } from '@/auth/dto/verify-2fa.dto';
+import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
+import { LineLoginDto } from '@/auth/dto/line-login.dto';
+import { CompleteLineDto } from '@/auth/dto/complete-line.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -49,6 +53,27 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('google')
+  async loginWithGoogle(@Body() dto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('line')
+  async loginWithLine(@Body() dto: LineLoginDto) {
+    return this.authService.loginWithLine(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('line/complete')
+  async completeLineRegistration(@Body() dto: CompleteLineDto) {
+    return this.authService.completeLineRegistration(dto);
+  }
+
   @Get('me')
   async getMe(@CurrentUser('sub') userId: string) {
     return this.authService.getMe(userId);
@@ -79,5 +104,24 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/verify')
+  async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
+    return this.authService.verifyTwoFactor(dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/enable')
+  async enableTwoFactor(@CurrentUser('sub') userId: string) {
+    return this.authService.enableTwoFactor(userId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/disable')
+  async disableTwoFactor(@CurrentUser('sub') userId: string) {
+    return this.authService.disableTwoFactor(userId);
   }
 }
