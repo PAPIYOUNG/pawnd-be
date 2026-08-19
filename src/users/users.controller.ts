@@ -4,7 +4,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
+  Post,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -12,6 +15,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '@/users/users.service';
 import { UpdateProfileDto } from '@/users/dto/update-profile.dto';
 import { ChangePasswordDto } from '@/users/dto/change-password.dto';
+import { UpdateSettingsDto } from '@/users/dto/update-settings.dto';
+import { ChangeEmailDto } from '@/users/dto/change-email.dto';
+import { VerifyEmailChangeDto } from '@/users/dto/verify-email-change.dto';
 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -68,5 +74,30 @@ export class UsersController {
     }
 
     return this.usersService.uploadAvatar(userId, file);
+  }
+
+  @Patch('me/settings')
+  async updateSettings(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UpdateSettingsDto,
+  ) {
+    return this.usersService.updateSettings(userId, dto);
+  }
+
+  @Patch('me/email')
+  async changeEmail(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ChangeEmailDto,
+  ) {
+    return this.usersService.changeEmail(userId, dto);
+  }
+
+  @Post('me/email/verify')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmailChange(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: VerifyEmailChangeDto,
+  ) {
+    return this.usersService.verifyEmailChange(userId, dto);
   }
 }
