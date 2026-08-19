@@ -123,6 +123,7 @@ model User {
   email                   String               @unique @db.VarChar(255)
   passwordHash            String?              @map("password_hash") @db.VarChar(255)
   phone                   String?              @db.VarChar(30)
+  address                 String?
   lineId                  String?              @map("line_id") @db.VarChar(100)
   avatarUrl               String?              @map("avatar_url")
   role                    UserRole             @default(USER)
