@@ -82,6 +82,16 @@ enum PostStatus {
   @@map("post_status")
 }
 
+enum PostEventType {
+  POST_CREATED
+  AI_MATCHES_FOUND
+  AI_MATCH_CONFIRMED
+  REUNITED
+  POST_CLOSED
+
+  @@map("post_event_type")
+}
+
 enum NotificationType {
   AI_MATCH
   NEW_MESSAGE
@@ -130,10 +140,14 @@ model User {
   emailVerifiedAt         DateTime?            @map("email_verified_at")
   notificationEnabled     Boolean              @default(true) @map("notification_enabled")
   twoFactorEnabled        Boolean              @default(true) @map("2fa_enable")
+  lastLoginAt             DateTime?            @map("last_login_at")
   createdAt               DateTime             @default(now()) @map("created_at")
   updatedAt               DateTime             @updatedAt @map("updated_at")
   authAccounts            AuthAccount[]
   emailVerifications      EmailVerification[]
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  twoFactorChallenges     TwoFactorChallenge[]
   pets                    Pet[]
   petPosts                PetPost[]
   postEvents              PostEvent[]
@@ -173,19 +187,75 @@ model AuthAccount {
 }
 
 model EmailVerification {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  email      String    @db.VarChar(255)
-  otpHash    String    @map("otp_hash") @db.VarChar(255)
-  expiresAt  DateTime  @map("expires_at")
-  verifiedAt DateTime? @map("verified_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  user       User      @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  email     String   @db.VarChar(255)
+  otpHash   String   @map("otp_hash") @db.VarChar(255)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([email])
   @@index([expiresAt])
   @@map("email_verifications")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model TwoFactorChallenge {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  tempTokenHash String   @unique @map("temp_token_hash") @db.VarChar(255)
+  otpHash       String   @map("otp_hash") @db.VarChar(255)
+  attempts      Int      @default(0)
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("two_factor_challenges")
+}
+
+model LinePendingLink {
+  id                String   @id @default(uuid()) @db.Uuid
+  tempTokenHash     String   @unique @map("temp_token_hash") @db.VarChar(255)
+  providerAccountId String   @map("provider_account_id") @db.VarChar(255)
+  firstName         String?  @map("first_name") @db.VarChar(100)
+  avatarUrl         String?  @map("avatar_url")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("line_pending_links")
 }
 
 model Pet {
@@ -309,7 +379,7 @@ model PostImage {
 model ImageEmbedding {
   id           String                @id @default(uuid()) @db.Uuid
   postImageId  String                @map("post_image_id") @db.Uuid
-  embedding    Unsupported("vector")
+  embedding    Unsupported("vector") //Unsupported เพราะ PostgreSQL รู้จัก vector ผ่าน pgvector แต่ Prisma ยังไม่รองรับชนิด vector โดยตรง
   modelName    String                @map("model_name") @db.VarChar(100)
   modelVersion String?               @map("model_version") @db.VarChar(50)
   dimension    Int
@@ -347,14 +417,14 @@ model AiMatch {
 }
 
 model PostEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  postId      String   @map("post_id") @db.Uuid
-  createdBy   String?  @map("created_by") @db.Uuid
-  eventType   String   @map("event_type") @db.VarChar(100)
+  id          String        @id @default(uuid()) @db.Uuid
+  postId      String        @map("post_id") @db.Uuid
+  createdBy   String?       @map("created_by") @db.Uuid
+  eventType   PostEventType @map("event_type")
   description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  post        PetPost  @relation(fields: [postId], references: [id])
-  creator     User?    @relation(fields: [createdBy], references: [id])
+  createdAt   DateTime      @default(now()) @map("created_at")
+  post        PetPost       @relation(fields: [postId], references: [id])
+  creator     User?         @relation(fields: [createdBy], references: [id])
 
   @@index([postId])
   @@index([createdAt])
