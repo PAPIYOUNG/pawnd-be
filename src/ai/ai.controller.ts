@@ -9,6 +9,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -57,6 +58,22 @@ export class AiController {
   @Get('posts/:id/matches')
   getPostMatches(@Param('id') id: string) {
     return this.aiMatchingService.getPostMatches(id);
+  }
+
+  @Patch('posts/:postId/matches/:matchId/pin')
+  togglePinMatch(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.aiMatchingService.togglePinMatch(postId, matchId);
+  }
+
+  @Patch('posts/:postId/matches/:matchId/dismiss')
+  toggleDismissMatch(
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Param('matchId', ParseUUIDPipe) matchId: string,
+  ) {
+    return this.aiMatchingService.toggleDismissMatch(postId, matchId);
   }
 
   @Get('matches/:matchId')

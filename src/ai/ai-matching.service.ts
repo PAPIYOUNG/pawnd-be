@@ -358,6 +358,162 @@ export class AiMatchingService {
     };
   }
 
+  async togglePinMatch(postId: string, matchId: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: {
+        id: postId,
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const match = await this.prisma.aiMatch.findUnique({
+      where: {
+        id: matchId,
+      },
+    });
+
+    if (!match) {
+      throw new NotFoundException('AI match not found');
+    }
+
+    const belongsToMatch =
+      match.lostPostId === postId || match.foundPostId === postId;
+
+    if (!belongsToMatch) {
+      throw new BadRequestException(
+        'This match does not belong to the specified post',
+      );
+    }
+
+    const existingAction = await this.prisma.aiMatchUserAction.findUnique({
+      where: {
+        matchId_postId: {
+          matchId,
+          postId,
+        },
+      },
+    });
+
+    const nextPinned = !(existingAction?.isPinned ?? false);
+
+    const action = await this.prisma.aiMatchUserAction.upsert({
+      where: {
+        matchId_postId: {
+          matchId,
+          postId,
+        },
+      },
+
+      create: {
+        matchId,
+        postId,
+        isPinned: nextPinned,
+        isDismissed: false,
+      },
+
+      update: {
+        isPinned: nextPinned,
+
+        // ถ้ากลับมา pin
+        // ให้ยกเลิก dismissed ด้วย
+        ...(nextPinned
+          ? {
+              isDismissed: false,
+            }
+          : {}),
+      },
+    });
+
+    return {
+      matchId,
+      postId,
+      isPinned: action.isPinned,
+      isDismissed: action.isDismissed,
+    };
+  }
+
+  async toggleDismissMatch(postId: string, matchId: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: {
+        id: postId,
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const match = await this.prisma.aiMatch.findUnique({
+      where: {
+        id: matchId,
+      },
+    });
+
+    if (!match) {
+      throw new NotFoundException('AI match not found');
+    }
+
+    const belongsToMatch =
+      match.lostPostId === postId || match.foundPostId === postId;
+
+    if (!belongsToMatch) {
+      throw new BadRequestException(
+        'This match does not belong to the specified post',
+      );
+    }
+
+    const existingAction = await this.prisma.aiMatchUserAction.findUnique({
+      where: {
+        matchId_postId: {
+          matchId,
+          postId,
+        },
+      },
+    });
+
+    const nextDismissed = !(existingAction?.isDismissed ?? false);
+
+    const action = await this.prisma.aiMatchUserAction.upsert({
+      where: {
+        matchId_postId: {
+          matchId,
+          postId,
+        },
+      },
+
+      create: {
+        matchId,
+        postId,
+
+        isPinned: false,
+        isDismissed: nextDismissed,
+      },
+
+      update: {
+        isDismissed: nextDismissed,
+
+        // ถ้า dismiss match
+        // ให้เอา pin ออกด้วย
+        ...(nextDismissed
+          ? {
+              isPinned: false,
+            }
+          : {}),
+      },
+    });
+
+    return {
+      matchId,
+      postId,
+
+      isPinned: action.isPinned,
+      isDismissed: action.isDismissed,
+    };
+  }
+
   // =========================================================
   // VECTOR SIMILARITY
   // =========================================================
