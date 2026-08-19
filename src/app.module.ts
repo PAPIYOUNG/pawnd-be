@@ -10,6 +10,7 @@ import { RoleGuard } from '@/auth/guards/role.guard';
 import { AuthModule } from '@/auth/auth.module';
 import { DatabaseModule } from '@/database/database.module';
 import { JwtModule } from '@/infrastructure/jwt/jwt.module';
+import { MapModule } from '@/map/map.module';
 import { PetModule } from '@/pet/pet.module';
 import { PetQrModule } from './pet-qr/pet-qr.module';
 
@@ -27,6 +28,7 @@ import { PostEventsModule } from './post-events/post-events.module';
     DatabaseModule,
     AuthModule,
     JwtModule,
+    MapModule,
     PetModule,
     PetQrModule,
     PostEventsModule,
