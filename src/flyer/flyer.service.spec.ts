@@ -21,7 +21,11 @@ describe('FlyerService', () => {
   };
 
   const mockConfigService = {
-    get: jest.fn().mockReturnValue('http://localhost:3000'),
+    get: jest.fn((key: string, defaultValue?: any) => {
+      if (key === 'PORT') return 8000;
+      if (key === 'FRONTEND_URL') return 'http://localhost:3000';
+      return defaultValue;
+    }),
   };
 
   const mockCloudinaryService = {
@@ -65,6 +69,7 @@ describe('FlyerService', () => {
         id: postId,
         userId,
         type: 'LOST',
+        status: 'ACTIVE',
         petName: 'Milo',
         petType: 'DOG',
         breed: 'Golden Retriever',
@@ -92,7 +97,7 @@ describe('FlyerService', () => {
       const mockFlyerRecord = {
         id: 'flyer-uuid-1',
         postId,
-        fileUrl: 'https://cloudinary.com/flyer.pdf',
+        fileUrl: `http://localhost:8000/posts/${postId}/flyer/download`,
         qrUrl: 'https://cloudinary.com/qr.png',
         generatedAt: new Date(),
       };
@@ -100,9 +105,6 @@ describe('FlyerService', () => {
       mockPrismaService.petPost.findUnique.mockResolvedValue(mockPost);
       mockCloudinaryService.uploadFlyerQrCode.mockResolvedValue(
         'https://cloudinary.com/qr.png',
-      );
-      mockCloudinaryService.uploadFlyerPdf.mockResolvedValue(
-        'https://cloudinary.com/flyer.pdf',
       );
       mockPrismaService.flyer.create.mockResolvedValue(mockFlyerRecord);
 
@@ -119,11 +121,10 @@ describe('FlyerService', () => {
         },
       });
       expect(mockCloudinaryService.uploadFlyerQrCode).toHaveBeenCalledTimes(1);
-      expect(mockCloudinaryService.uploadFlyerPdf).toHaveBeenCalledTimes(1);
       expect(mockPrismaService.flyer.create).toHaveBeenCalledWith({
         data: {
           postId,
-          fileUrl: 'https://cloudinary.com/flyer.pdf',
+          fileUrl: `http://localhost:8000/posts/${postId}/flyer/download`,
           qrUrl: 'https://cloudinary.com/qr.png',
         },
         select: {
@@ -135,6 +136,19 @@ describe('FlyerService', () => {
         },
       });
       expect(result).toEqual({ flyer: mockFlyerRecord });
+    });
+
+    it('should throw NotFoundException if post is DELETED or HIDDEN', async () => {
+      mockPrismaService.petPost.findUnique.mockResolvedValue({
+        id: 'post-1',
+        status: 'DELETED',
+      });
+
+      await expect(
+        service.generateFlyer('user-1', 'post-1', {
+          template: FlyerTemplate.STANDARD,
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException if post not found', async () => {

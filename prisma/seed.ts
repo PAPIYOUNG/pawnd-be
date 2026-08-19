@@ -4,6 +4,8 @@ import {
   PetType,
   PetGender,
   UserStatus,
+  PostType,
+  PostStatus,
 } from '@/database/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
@@ -189,6 +191,52 @@ async function main() {
   console.log(
     `Seeded ${users.length} users with ${users.flatMap((u) => u.pets).length} pets.`,
   );
+
+  // Seed sample post for testing
+  const aliceUser = await prisma.user.findUnique({
+    where: { email: 'alice.nguyen@example.com' },
+    include: { pets: true },
+  });
+
+  if (aliceUser && aliceUser.pets.length > 0) {
+    const bellaPet = aliceUser.pets.find((p) => p.name === 'Bella');
+    const existingPost = await prisma.petPost.findFirst({
+      where: { userId: aliceUser.id, petName: 'Bella' },
+    });
+
+    if (!existingPost) {
+      const post = await prisma.petPost.create({
+        data: {
+          userId: aliceUser.id,
+          petId: bellaPet?.id ?? null,
+          type: PostType.LOST,
+          status: PostStatus.ACTIVE,
+          petName: 'Bella',
+          petType: PetType.DOG,
+          breed: 'Golden Retriever',
+          gender: PetGender.FEMALE,
+          color: 'Golden',
+          distinctiveFeatures: 'Wearing red collar with bell',
+          description: 'Lost near Chatuchak Park around 5 PM.',
+          eventDate: new Date('2026-08-15T17:00:00.000Z'),
+          latitude: 13.803444,
+          longitude: 100.553444,
+          province: 'Bangkok',
+          district: 'Chatuchak',
+          subdistrict: 'Chatuchak',
+          locationDescription: 'Near MRT Chatuchak Park Exit 1',
+          rewardAmount: 5000,
+          contactPhone: '0812345671',
+          contactLineId: 'alice_pawnd',
+          contactEmail: 'alice.nguyen@example.com',
+        },
+      });
+
+      console.log(`Seeded Sample Lost Post ID: ${post.id}`);
+    } else {
+      console.log(`Sample Lost Post ID: ${existingPost.id}`);
+    }
+  }
 
   await seedCredentialTestUser();
 }

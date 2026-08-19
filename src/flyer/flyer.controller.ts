@@ -1,4 +1,5 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import {
   Body,
   Controller,
@@ -38,18 +39,18 @@ export class FlyerController {
     return this.flyerService.getPostFlyer(userId, postId);
   }
 
+  @Public()
   @Get(':id/flyer/download')
   @Header('Content-Type', 'application/pdf')
   async downloadFlyer(
-    @CurrentUser('sub') userId: string,
     @Param('id', ParseUUIDPipe) postId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const buffer = await this.flyerService.downloadFlyer(userId, postId);
+    const buffer = await this.flyerService.downloadFlyer('', postId);
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="flyer-${postId}.pdf"`,
+      'Content-Disposition': `inline; filename="flyer-${postId}.pdf"`,
       'Content-Length': buffer.length.toString(),
     });
 

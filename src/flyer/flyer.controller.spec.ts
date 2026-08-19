@@ -86,7 +86,6 @@ describe('FlyerController', () => {
 
   describe('downloadFlyer', () => {
     it('should set headers and return StreamableFile', async () => {
-      const userId = 'user-1';
       const postId = 'post-1';
       const mockBuffer = Buffer.from('PDF binary content');
 
@@ -96,19 +95,12 @@ describe('FlyerController', () => {
         set: jest.fn(),
       } as unknown as Response;
 
-      const result = await controller.downloadFlyer(
-        userId,
-        postId,
-        mockResponse,
-      );
+      const result = await controller.downloadFlyer(postId, mockResponse);
 
-      expect(mockFlyerService.downloadFlyer).toHaveBeenCalledWith(
-        userId,
-        postId,
-      );
+      expect(mockFlyerService.downloadFlyer).toHaveBeenCalledWith('', postId);
       expect(mockResponse.set).toHaveBeenCalledWith({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="flyer-${postId}.pdf"`,
+        'Content-Disposition': `inline; filename="flyer-${postId}.pdf"`,
         'Content-Length': mockBuffer.length.toString(),
       });
       expect(result).toBeInstanceOf(StreamableFile);

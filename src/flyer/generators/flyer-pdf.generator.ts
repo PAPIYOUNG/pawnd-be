@@ -191,10 +191,10 @@ export class FlyerPdfGenerator {
           width: 515,
         });
 
-      const phone = data.contactPhone || data.userPhone || 'N/A';
+      const phone = data.contactPhone ? `Phone: ${data.contactPhone}` : '';
       const line = data.contactLineId ? `Line: ${data.contactLineId}` : '';
       const email = data.contactEmail ? `Email: ${data.contactEmail}` : '';
-      const contactSummary = [phone !== 'N/A' ? `Phone: ${phone}` : '', line, email]
+      const contactSummary = [phone, line, email]
         .filter(Boolean)
         .join(' | ');
 
@@ -202,10 +202,15 @@ export class FlyerPdfGenerator {
         .fillColor('#FFFFFF')
         .fontSize(13)
         .font('Helvetica-Bold')
-        .text(contactSummary || 'Scan QR Code above to contact owner', 40, currentY + 34, {
-          align: 'center',
-          width: 515,
-        });
+        .text(
+          contactSummary || 'Scan QR Code above to contact owner on PAWND',
+          40,
+          currentY + 34,
+          {
+            align: 'center',
+            width: 515,
+          },
+        );
 
       // 8. Bottom Brand Tag
       doc
