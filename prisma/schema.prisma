@@ -140,12 +140,14 @@ model User {
   emailVerifiedAt         DateTime?            @map("email_verified_at")
   notificationEnabled     Boolean              @default(true) @map("notification_enabled")
   twoFactorEnabled        Boolean              @default(true) @map("2fa_enable")
+  lastLoginAt             DateTime?            @map("last_login_at")
   createdAt               DateTime             @default(now()) @map("created_at")
   updatedAt               DateTime             @updatedAt @map("updated_at")
   authAccounts            AuthAccount[]
   emailVerifications      EmailVerification[]
   refreshTokens           RefreshToken[]
   passwordResetTokens     PasswordResetToken[]
+  twoFactorChallenges     TwoFactorChallenge[]
   pets                    Pet[]
   petPosts                PetPost[]
   postEvents              PostEvent[]
@@ -185,14 +187,14 @@ model AuthAccount {
 }
 
 model EmailVerification {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  email      String    @db.VarChar(255)
-  otpHash    String    @map("otp_hash") @db.VarChar(255)
-  expiresAt  DateTime  @map("expires_at")
-  verifiedAt DateTime? @map("verified_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  user       User      @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  email     String   @db.VarChar(255)
+  otpHash   String   @map("otp_hash") @db.VarChar(255)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([email])
@@ -226,6 +228,34 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+model TwoFactorChallenge {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  tempTokenHash String   @unique @map("temp_token_hash") @db.VarChar(255)
+  otpHash       String   @map("otp_hash") @db.VarChar(255)
+  attempts      Int      @default(0)
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("two_factor_challenges")
+}
+
+model LinePendingLink {
+  id                String   @id @default(uuid()) @db.Uuid
+  tempTokenHash     String   @unique @map("temp_token_hash") @db.VarChar(255)
+  providerAccountId String   @map("provider_account_id") @db.VarChar(255)
+  firstName         String?  @map("first_name") @db.VarChar(100)
+  avatarUrl         String?  @map("avatar_url")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("line_pending_links")
 }
 
 model Pet {
