@@ -216,6 +216,16 @@ export class PetService {
       throw new NotFoundException('Pet not found');
     }
 
+    const currentImagesCount = await this.prisma.petImage.count({
+      where: { petId },
+    });
+
+    if (currentImagesCount + files.length > 3) {
+      throw new BadRequestException(
+        `Maximum 3 images allowed per pet. You currently have ${currentImagesCount} images.`,
+      );
+    }
+
     const startSortOrder =
       pet.images.length > 0 ? pet.images[0].sortOrder + 1 : 0;
     const uploadedImagesData: {

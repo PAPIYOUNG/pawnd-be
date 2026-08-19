@@ -25,6 +25,7 @@ describe('PetService', () => {
       updateMany: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
+      count: jest.fn(),
     },
     petQrCode: {
       deleteMany: jest.fn(),
@@ -408,6 +409,7 @@ describe('PetService', () => {
       };
 
       mockPrismaService.pet.findFirst.mockResolvedValue(mockPet);
+      mockPrismaService.petImage.count.mockResolvedValue(0);
       mockCloudinaryService.upload.mockResolvedValue(
         'https://cloudinary.com/img1.jpg',
       );
@@ -424,6 +426,9 @@ describe('PetService', () => {
 
       const result = await service.uploadPetImages(ownerId, petId, mockFiles);
 
+      expect(mockPrismaService.petImage.count).toHaveBeenCalledWith({
+        where: { petId },
+      });
       expect(mockCloudinaryService.upload).toHaveBeenCalledWith(mockFiles[0]);
       expect(mockPrismaService.petImage.create).toHaveBeenCalledWith({
         data: {
@@ -445,6 +450,22 @@ describe('PetService', () => {
         data: { profileImageUrl: 'https://cloudinary.com/img1.jpg' },
       });
       expect(result).toEqual({ images: [mockCreatedImage] });
+    });
+
+    it('should throw BadRequestException if total images exceed 3', async () => {
+      const ownerId = '550e8400-e29b-41d4-a716-446655440000';
+      const petId = '660e8400-e29b-41d4-a716-446655440001';
+      const mockFiles = [
+        { buffer: Buffer.from('test1') },
+        { buffer: Buffer.from('test2') },
+      ] as Express.Multer.File[];
+
+      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId, ownerId });
+      mockPrismaService.petImage.count.mockResolvedValue(2); // 2 + 2 = 4 > 3
+
+      await expect(
+        service.uploadPetImages(ownerId, petId, mockFiles),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if files array is empty', async () => {

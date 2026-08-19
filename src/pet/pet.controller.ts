@@ -62,7 +62,7 @@ export class PetController {
   }
 
   @Post(':id/images')
-  @UseInterceptors(FilesInterceptor('images'))
+  @UseInterceptors(FilesInterceptor('images', 3))
   async uploadPetImages(
     @CurrentUser('sub') ownerId: string,
     @Param('id', ParseUUIDPipe) id: string,
