@@ -1,12 +1,14 @@
 import 'dotenv/config';
+
 import {
-  PrismaClient,
-  PetType,
   PetGender,
-  UserStatus,
-  PostType,
+  PetType,
   PostStatus,
+  PostType,
+  PrismaClient,
+  UserStatus,
 } from '@/database/generated/prisma/client';
+
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
 
@@ -17,6 +19,10 @@ const adapter = new PrismaPg({
 const prisma = new PrismaClient({ adapter });
 
 const SALT_ROUNDS = 10;
+
+// =========================================================
+// TYPES
+// =========================================================
 
 interface SeedPet {
   name: string;
@@ -34,6 +40,10 @@ interface SeedUser {
   phone: string;
   pets: SeedPet[];
 }
+
+// =========================================================
+// USERS + PETS
+// =========================================================
 
 const users: SeedUser[] = [
   {
@@ -158,7 +168,44 @@ const users: SeedUser[] = [
   },
 ];
 
+// =========================================================
+// AI MATCHING TEST IDS
+// =========================================================
+
+const TEST_POST_IDS = {
+  mawinLost: '11111111-1111-4111-8111-111111111111',
+  strayFound: '22222222-2222-4222-8222-222222222222',
+  summerLost: '33333333-3333-4333-8333-333333333333',
+  summerFound: '44444444-4444-4444-8444-444444444444',
+};
+
+const TEST_IMAGE_IDS = {
+  mawin: '53333333-3333-4333-8333-333333333333',
+  stray: '51111111-1111-4111-8111-111111111111',
+
+  summerLost1: '52222222-2222-4222-8222-222222222222',
+  summerLost2: '55555555-5555-4555-8555-555555555555',
+
+  summerFound: '54444444-4444-4444-8444-444444444444',
+};
+
+// =========================================================
+// MAIN
+// =========================================================
+
 async function main() {
+  await seedUsersAndPets();
+  await seedCredentialTestUser();
+  await seedAiMatchingPosts();
+
+  console.log('✅ Database seed completed');
+}
+
+// =========================================================
+// USERS + PETS
+// =========================================================
+
+async function seedUsersAndPets() {
   const passwordHash = await bcrypt.hash('Password123!', SALT_ROUNDS);
 
   for (const userData of users) {
@@ -168,7 +215,14 @@ async function main() {
       where: {
         email: userFields.email,
       },
-      update: {},
+
+      update: {
+        firstName: userFields.firstName,
+        lastName: userFields.lastName,
+        phone: userFields.phone,
+        status: UserStatus.ACTIVE,
+      },
+
       create: {
         ...userFields,
         passwordHash,
@@ -185,42 +239,55 @@ async function main() {
         },
       });
 
-      if (!existingPet) {
-        await prisma.pet.create({
+      if (existingPet) {
+        await prisma.pet.update({
+          where: {
+            id: existingPet.id,
+          },
+
           data: {
-            ...pet,
-            ownerId: user.id,
+            type: pet.type,
+            breed: pet.breed,
+            gender: pet.gender,
+            color: pet.color,
+            age: pet.age,
           },
         });
+
+        continue;
       }
+
+      await prisma.pet.create({
+        data: {
+          ...pet,
+          ownerId: user.id,
+        },
+      });
     }
   }
 
   console.log(
-    `Seeded ${users.length} users with ${
-      users.flatMap((u) => u.pets).length
-    } pets.`,
+    `✅ Seeded ${users.length} users and ${
+      users.flatMap((user) => user.pets).length
+    } pets`,
   );
-
-  await seedCredentialTestUser();
-
-  // เพิ่ม AI matching seed
-  await seedAiMatchingPosts();
 }
+
+// =========================================================
+// CREDENTIAL TEST USER
+// =========================================================
 
 async function seedCredentialTestUser() {
   const email = process.env.TEST_USER_EMAIL;
   const password = process.env.TEST_USER_PASSWORD;
 
   if (!email || !password) {
-    console.log(
-      'Skipped credential test user — set TEST_USER_EMAIL and TEST_USER_PASSWORD in .env to create one.',
-    );
+    console.log('⏭️ Skipped credential test user');
 
     return;
   }
 
-  const testPasswordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
   await prisma.user.upsert({
     where: {
@@ -228,74 +295,120 @@ async function seedCredentialTestUser() {
     },
 
     update: {
-      passwordHash: testPasswordHash,
+      passwordHash,
+      status: UserStatus.ACTIVE,
     },
 
     create: {
       firstName: 'Test',
       lastName: 'User',
       email,
-      passwordHash: testPasswordHash,
+      passwordHash,
       status: UserStatus.ACTIVE,
       emailVerifiedAt: new Date(),
     },
   });
 
-  console.log(`Seeded credential test user: ${email}`);
+  console.log(`✅ Seeded credential test user: ${email}`);
 }
 
 // =========================================================
-// AI MATCHING TEST DATA
+// AI MATCHING POSTS
 // =========================================================
 
 async function seedAiMatchingPosts() {
-  const user = await prisma.user.findUnique({
+  const owner = await prisma.user.findUnique({
     where: {
       email: 'alice.nguyen@example.com',
     },
   });
 
-  if (!user) {
-    throw new Error('Seed user for AI matching was not found');
+  if (!owner) {
+    throw new Error('AI matching seed owner not found');
   }
 
-  const LOST_POST_1_ID = '11111111-1111-4111-8111-111111111111';
-
-  const LOST_POST_2_ID = '22222222-2222-4222-8222-222222222222';
-
-  const FOUND_POST_1_ID = '33333333-3333-4333-8333-333333333333';
-
-  const FOUND_POST_2_ID = '44444444-4444-4444-8444-444444444444';
+  const postIds = Object.values(TEST_POST_IDS);
 
   // =========================================================
-  // LOST 1
+  // CLEAN OLD AI MATCH RESULTS
+  // =========================================================
+
+  await prisma.aiMatch.deleteMany({
+    where: {
+      OR: [
+        {
+          lostPostId: {
+            in: postIds,
+          },
+        },
+        {
+          foundPostId: {
+            in: postIds,
+          },
+        },
+      ],
+    },
+  });
+
+  // =========================================================
+  // POST 1 - LOST - มาวิน
+  // สีส้มอ่อน
   // =========================================================
 
   await prisma.petPost.upsert({
     where: {
-      id: LOST_POST_1_ID,
+      id: TEST_POST_IDS.mawinLost,
     },
 
-    update: {},
-
-    create: {
-      id: LOST_POST_1_ID,
-      userId: user.id,
+    update: {
+      userId: owner.id,
 
       type: PostType.LOST,
       status: PostStatus.ACTIVE,
 
-      petName: 'ส้ม',
+      petName: 'มาวิน',
       petType: PetType.CAT,
 
       breed: null,
+      gender: null,
 
-      color: 'สีส้มลายแท็บบี้และสีขาว',
+      color: 'สีส้มอ่อน',
 
-      distinctiveFeatures: 'มีขนสีขาวบริเวณรอบปากและจมูก สวมปลอกคอสีแดง',
+      distinctiveFeatures: 'ขนสีส้มอ่อน มีขนสีขาวบริเวณใบหน้าและลำตัว',
 
-      description:
-        'แมวขนสั้นสีส้มลายแท็บบี้ มีขนสีขาวบริเวณรอบปากและจมูก และสวมปลอกคอสีแดง',
+      description: 'แมวขนสีส้มอ่อน มีขนสีขาวบริเวณใบหน้าและลำตัว',
+
+      eventDate: new Date('2026-08-18T10:00:00+07:00'),
+
+      latitude: 13.8165,
+      longitude: 100.5612,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'ลาดยาว',
+
+      locationDescription: 'บริเวณใกล้สวนจตุจักร',
+    },
+
+    create: {
+      id: TEST_POST_IDS.mawinLost,
+
+      userId: owner.id,
+
+      type: PostType.LOST,
+      status: PostStatus.ACTIVE,
+
+      petName: 'มาวิน',
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีส้มอ่อน',
+
+      distinctiveFeatures: 'ขนสีส้มอ่อน มีขนสีขาวบริเวณใบหน้าและลำตัว',
+
+      description: 'แมวขนสีส้มอ่อน มีขนสีขาวบริเวณใบหน้าและลำตัว',
 
       eventDate: new Date('2026-08-18T10:00:00+07:00'),
 
@@ -311,122 +424,108 @@ async function seedAiMatchingPosts() {
   });
 
   // =========================================================
-  // LOST 2
+  // POST 2 - FOUND - แมวจร
+  // สีสลิด
   // =========================================================
 
   await prisma.petPost.upsert({
     where: {
-      id: LOST_POST_2_ID,
+      id: TEST_POST_IDS.strayFound,
     },
 
-    update: {},
+    update: {
+      userId: owner.id,
+
+      type: PostType.FOUND,
+      status: PostStatus.ACTIVE,
+
+      petName: null,
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีสลิด',
+
+      distinctiveFeatures: 'ขนสั้นลายสลิด มีลายเข้มบริเวณลำตัว ใบหน้า และขา',
+
+      description: 'แมวจรขนสั้นสีสลิด มีลายเข้มบริเวณลำตัว ใบหน้า และขา',
+
+      eventDate: new Date('2026-08-18T13:00:00+07:00'),
+
+      latitude: 13.83,
+      longitude: 100.57,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'เสนานิคม',
+
+      locationDescription: 'พบในพื้นที่จตุจักร',
+    },
 
     create: {
-      id: LOST_POST_2_ID,
-      userId: user.id,
+      id: TEST_POST_IDS.strayFound,
+
+      userId: owner.id,
+
+      type: PostType.FOUND,
+      status: PostStatus.ACTIVE,
+
+      petName: null,
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีสลิด',
+
+      distinctiveFeatures: 'ขนสั้นลายสลิด มีลายเข้มบริเวณลำตัว ใบหน้า และขา',
+
+      description: 'แมวจรขนสั้นสีสลิด มีลายเข้มบริเวณลำตัว ใบหน้า และขา',
+
+      eventDate: new Date('2026-08-18T13:00:00+07:00'),
+
+      latitude: 13.83,
+      longitude: 100.57,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'เสนานิคม',
+
+      locationDescription: 'พบในพื้นที่จตุจักร',
+    },
+  });
+
+  // =========================================================
+  // POST 3 - LOST - ซัมเมอ
+  // มี 2 รูป
+  // Ground Truth คู่กับ POST 4
+  // =========================================================
+
+  await prisma.petPost.upsert({
+    where: {
+      id: TEST_POST_IDS.summerLost,
+    },
+
+    update: {
+      userId: owner.id,
 
       type: PostType.LOST,
       status: PostStatus.ACTIVE,
 
-      petName: 'มีมี่',
+      petName: 'ซัมเมอ',
       petType: PetType.CAT,
 
       breed: null,
+      gender: null,
 
-      color: 'สีขาวและเทา',
+      color: 'สีส้มและขาว',
 
-      distinctiveFeatures: 'มีลายสีเทาบริเวณศีรษะและลำตัว หางมีสีเข้ม',
-
-      description:
-        'แมวขนสั้นสีขาวและเทา มีลายสีเทาบริเวณศีรษะและลำตัว และมีหางสีเข้ม',
-
-      eventDate: new Date('2026-08-17T14:00:00+07:00'),
-
-      latitude: 13.805,
-      longitude: 100.55,
-
-      province: 'กรุงเทพมหานคร',
-      district: 'จตุจักร',
-      subdistrict: 'จอมพล',
-
-      locationDescription: 'บริเวณใกล้ถนนพหลโยธิน',
-    },
-  });
-
-  // =========================================================
-  // FOUND 1
-  // ตั้งให้ใกล้ LOST 1
-  // =========================================================
-
-  await prisma.petPost.upsert({
-    where: {
-      id: FOUND_POST_1_ID,
-    },
-
-    update: {},
-
-    create: {
-      id: FOUND_POST_1_ID,
-      userId: user.id,
-
-      type: PostType.FOUND,
-      status: PostStatus.ACTIVE,
-
-      petName: null,
-      petType: PetType.CAT,
-
-      breed: null,
-
-      color: 'สีส้มลายแท็บบี้และสีขาว',
-
-      distinctiveFeatures: 'มีขนสีขาวบริเวณรอบปากและจมูก สวมปลอกคอสีแดง',
+      distinctiveFeatures:
+        'มีขนสีขาวบริเวณรอบปากและจมูก มีลายสีส้มบริเวณศีรษะและลำตัว',
 
       description:
-        'แมวขนสั้นสีส้มลายแท็บบี้ มีขนสีขาวบริเวณรอบปากและจมูก และมีปลอกคอสีแดง',
-
-      eventDate: new Date('2026-08-18T15:00:00+07:00'),
-
-      latitude: 13.818,
-      longitude: 100.562,
-
-      province: 'กรุงเทพมหานคร',
-      district: 'จตุจักร',
-      subdistrict: 'ลาดยาว',
-
-      locationDescription: 'พบใกล้บริเวณสวนจตุจักร',
-    },
-  });
-
-  // =========================================================
-  // FOUND 2
-  // ตั้งให้ใกล้ LOST 2
-  // =========================================================
-
-  await prisma.petPost.upsert({
-    where: {
-      id: FOUND_POST_2_ID,
-    },
-
-    update: {},
-
-    create: {
-      id: FOUND_POST_2_ID,
-      userId: user.id,
-
-      type: PostType.FOUND,
-      status: PostStatus.ACTIVE,
-
-      petName: null,
-      petType: PetType.CAT,
-
-      breed: null,
-
-      color: 'สีขาวและเทา',
-
-      distinctiveFeatures: 'มีลายสีเทาบริเวณศีรษะและลำตัว หางมีสีเข้ม',
-
-      description:
-        'แมวขนสั้นสีขาวและเทา มีลายสีเทาบริเวณศีรษะและลำตัว และมีหางสีเข้ม',
+        'แมวขนสั้นสีส้มและขาว มีขนสีขาวบริเวณรอบปากและจมูก และมีลายสีส้มบริเวณศีรษะและลำตัว',
 
       eventDate: new Date('2026-08-18T09:00:00+07:00'),
 
@@ -437,7 +536,118 @@ async function seedAiMatchingPosts() {
       district: 'จตุจักร',
       subdistrict: 'จอมพล',
 
-      locationDescription: 'พบใกล้ถนนพหลโยธิน',
+      locationDescription: 'หายบริเวณถนนพหลโยธิน',
+    },
+
+    create: {
+      id: TEST_POST_IDS.summerLost,
+
+      userId: owner.id,
+
+      type: PostType.LOST,
+      status: PostStatus.ACTIVE,
+
+      petName: 'ซัมเมอ',
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีส้มและขาว',
+
+      distinctiveFeatures:
+        'มีขนสีขาวบริเวณรอบปากและจมูก มีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      description:
+        'แมวขนสั้นสีส้มและขาว มีขนสีขาวบริเวณรอบปากและจมูก และมีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      eventDate: new Date('2026-08-18T09:00:00+07:00'),
+
+      latitude: 13.807,
+      longitude: 100.5515,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'จอมพล',
+
+      locationDescription: 'หายบริเวณถนนพหลโยธิน',
+    },
+  });
+
+  // =========================================================
+  // POST 4 - FOUND - ซัมเมอ
+  // Ground Truth คู่กับ POST 3
+  // =========================================================
+
+  await prisma.petPost.upsert({
+    where: {
+      id: TEST_POST_IDS.summerFound,
+    },
+
+    update: {
+      userId: owner.id,
+
+      type: PostType.FOUND,
+      status: PostStatus.ACTIVE,
+
+      petName: null,
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีส้มและขาว',
+
+      distinctiveFeatures:
+        'มีขนสีขาวบริเวณรอบปากและจมูก มีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      description:
+        'แมวขนสั้นสีส้มและขาว มีขนสีขาวบริเวณรอบปากและจมูก และมีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      eventDate: new Date('2026-08-18T12:00:00+07:00'),
+
+      latitude: 13.8075,
+      longitude: 100.552,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'จอมพล',
+
+      locationDescription: 'พบใกล้บริเวณถนนพหลโยธิน',
+    },
+
+    create: {
+      id: TEST_POST_IDS.summerFound,
+
+      userId: owner.id,
+
+      type: PostType.FOUND,
+      status: PostStatus.ACTIVE,
+
+      petName: null,
+      petType: PetType.CAT,
+
+      breed: null,
+      gender: null,
+
+      color: 'สีส้มและขาว',
+
+      distinctiveFeatures:
+        'มีขนสีขาวบริเวณรอบปากและจมูก มีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      description:
+        'แมวขนสั้นสีส้มและขาว มีขนสีขาวบริเวณรอบปากและจมูก และมีลายสีส้มบริเวณศีรษะและลำตัว',
+
+      eventDate: new Date('2026-08-18T12:00:00+07:00'),
+
+      latitude: 13.8075,
+      longitude: 100.552,
+
+      province: 'กรุงเทพมหานคร',
+      district: 'จตุจักร',
+      subdistrict: 'จอมพล',
+
+      locationDescription: 'พบใกล้บริเวณถนนพหลโยธิน',
     },
   });
 
@@ -445,110 +655,153 @@ async function seedAiMatchingPosts() {
   // POST IMAGES
   // =========================================================
 
-  await prisma.postImage.upsert({
-    where: {
-      id: '51111111-1111-4111-8111-111111111111',
-    },
+  // ---------------------------------------------------------
+  // มาวิน LOST
+  // ---------------------------------------------------------
 
-    update: {
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091901/S__30564363_otkwzx.jpg',
-    },
+  await upsertPostImage({
+    id: TEST_IMAGE_IDS.mawin,
 
-    create: {
-      id: '51111111-1111-4111-8111-111111111111',
-      postId: LOST_POST_1_ID,
+    postId: TEST_POST_IDS.mawinLost,
 
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091901/S__30564363_otkwzx.jpg',
+    imageUrl:
+      'https://res.cloudinary.com/k8pidopz/image/upload/v1787091907/S__8069122_dtd5ye.jpg',
 
-      sortOrder: 0,
-    },
+    sortOrder: 0,
   });
 
-  await prisma.postImage.upsert({
-    where: {
-      id: '52222222-2222-4222-8222-222222222222',
-    },
+  // ---------------------------------------------------------
+  // แมวจร FOUND
+  // ---------------------------------------------------------
 
-    update: {
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787084843/S__30474245_mqsg3s.jpg',
-    },
+  await upsertPostImage({
+    id: TEST_IMAGE_IDS.stray,
 
-    create: {
-      id: '52222222-2222-4222-8222-222222222222',
-      postId: LOST_POST_2_ID,
+    postId: TEST_POST_IDS.strayFound,
 
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787084843/S__30474245_mqsg3s.jpg',
+    imageUrl:
+      'https://res.cloudinary.com/k8pidopz/image/upload/v1787091901/S__30564363_otkwzx.jpg',
 
-      sortOrder: 0,
-    },
+    sortOrder: 0,
   });
 
-  await prisma.postImage.upsert({
-    where: {
-      id: '53333333-3333-4333-8333-333333333333',
-    },
+  // ---------------------------------------------------------
+  // ซัมเมอ LOST - รูปที่ 1
+  // ---------------------------------------------------------
 
-    update: {
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091907/S__8069122_dtd5ye.jpg',
-    },
+  await upsertPostImage({
+    id: TEST_IMAGE_IDS.summerLost1,
 
-    create: {
-      id: '53333333-3333-4333-8333-333333333333',
-      postId: FOUND_POST_1_ID,
+    postId: TEST_POST_IDS.summerLost,
 
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091907/S__8069122_dtd5ye.jpg',
+    imageUrl:
+      'https://res.cloudinary.com/k8pidopz/image/upload/v1787084843/S__30474245_mqsg3s.jpg',
 
-      sortOrder: 0,
-    },
+    sortOrder: 0,
   });
 
-  await prisma.postImage.upsert({
-    where: {
-      id: '54444444-4444-4444-8444-444444444444',
-    },
+  // ---------------------------------------------------------
+  // ซัมเมอ LOST - รูปที่ 2
+  // ---------------------------------------------------------
 
-    update: {
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091896/S__30564361_xrd1da.jpg',
-    },
+  await upsertPostImage({
+    id: TEST_IMAGE_IDS.summerLost2,
 
-    create: {
-      id: '54444444-4444-4444-8444-444444444444',
-      postId: FOUND_POST_2_ID,
+    postId: TEST_POST_IDS.summerLost,
 
-      imageUrl:
-        'https://res.cloudinary.com/k8pidopz/image/upload/v1787091896/S__30564361_xrd1da.jpg',
+    imageUrl:
+      'https://res.cloudinary.com/k8pidopz/image/upload/v1787131810/S__30629891_g5sde6.jpg',
 
-      sortOrder: 0,
-    },
+    sortOrder: 1,
   });
 
-  console.log('Seeded AI matching posts.');
+  // ---------------------------------------------------------
+  // ซัมเมอ FOUND
+  // ---------------------------------------------------------
+
+  await upsertPostImage({
+    id: TEST_IMAGE_IDS.summerFound,
+
+    postId: TEST_POST_IDS.summerFound,
+
+    imageUrl:
+      'https://res.cloudinary.com/k8pidopz/image/upload/v1787091896/S__30564361_xrd1da.jpg',
+
+    sortOrder: 0,
+  });
+
+  console.log('✅ Seeded AI matching test data');
 
   console.log({
-    lostPost1: LOST_POST_1_ID,
-    lostPost2: LOST_POST_2_ID,
-    foundPost1: FOUND_POST_1_ID,
-    foundPost2: FOUND_POST_2_ID,
+    posts: {
+      mawinLost: TEST_POST_IDS.mawinLost,
+
+      strayFound: TEST_POST_IDS.strayFound,
+
+      summerLost: TEST_POST_IDS.summerLost,
+
+      summerFound: TEST_POST_IDS.summerFound,
+    },
 
     images: {
-      lost1: '51111111-1111-4111-8111-111111111111',
-      lost2: '52222222-2222-4222-8222-222222222222',
-      found1: '53333333-3333-4333-8333-333333333333',
-      found2: '54444444-4444-4444-8444-444444444444',
+      mawin: TEST_IMAGE_IDS.mawin,
+
+      stray: TEST_IMAGE_IDS.stray,
+
+      summerLost1: TEST_IMAGE_IDS.summerLost1,
+
+      summerLost2: TEST_IMAGE_IDS.summerLost2,
+
+      summerFound: TEST_IMAGE_IDS.summerFound,
+    },
+
+    expectedGroundTruth: {
+      lostPostId: TEST_POST_IDS.summerLost,
+
+      foundPostId: TEST_POST_IDS.summerFound,
     },
   });
 }
 
+// =========================================================
+// POST IMAGE HELPER
+// =========================================================
+
+async function upsertPostImage(input: {
+  id: string;
+  postId: string;
+  imageUrl: string;
+  sortOrder: number;
+}) {
+  await prisma.postImage.upsert({
+    where: {
+      id: input.id,
+    },
+
+    update: {
+      postId: input.postId,
+      imageUrl: input.imageUrl,
+      sortOrder: input.sortOrder,
+    },
+
+    create: {
+      id: input.id,
+      postId: input.postId,
+      imageUrl: input.imageUrl,
+      sortOrder: input.sortOrder,
+    },
+  });
+}
+
+// =========================================================
+// RUN
+// =========================================================
+
 main()
   .catch((error) => {
+    console.error('❌ Seed failed');
     console.error(error);
+
     process.exitCode = 1;
   })
   .finally(async () => {

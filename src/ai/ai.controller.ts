@@ -3,7 +3,15 @@ import { AiService } from '@/ai/ai.service';
 import { AnalyzeImageDto } from '@/ai/dto/analyze-image.dto';
 import { EmbeddingService } from '@/ai/service/embedding.service';
 import { Public } from '@/common/decorators/public.decorator';
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 
 @Controller('ai')
 export class AiController {
@@ -23,14 +31,39 @@ export class AiController {
   analyzeImage(@Body() dto: AnalyzeImageDto) {
     return this.aiService.analyzeImage(dto.imageUrl);
   }
-
-  @Post(':id/match')
-  matchPost(@Param('id') postId: string) {
-    return this.aiMatchingService.matchPost(postId);
-  }
-
+  //สร้างvector
   @Post('embedding/:postImageId')
   createEmbedding(@Param('postImageId') postImageId: string) {
     return this.embeddingService.createImageEmbedding(postImageId);
+  }
+
+  //test weight finalscore
+  @Get('similarity')
+  calculateSimilarity(
+    @Query('sourcePostId') sourcePostId: string,
+    @Query('candidatePostId') candidatePostId: string,
+  ) {
+    return this.embeddingService.calculatePostSimilarity(
+      sourcePostId,
+      candidatePostId,
+    );
+  }
+
+  @Post('match/:postId')
+  matchPost(@Param('postId') postId: string) {
+    return this.aiMatchingService.matchPost(postId);
+  }
+
+  @Get('posts/:id/matches')
+  getPostMatches(@Param('id') id: string) {
+    return this.aiMatchingService.getPostMatches(id);
+  }
+
+  @Get('matches/:matchId')
+  getMatchDetail(
+    @Param('matchId', ParseUUIDPipe)
+    matchId: string,
+  ) {
+    return this.aiMatchingService.getMatchDetail(matchId);
   }
 }

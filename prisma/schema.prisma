@@ -331,11 +331,12 @@ model PetPost {
 }
 
 model PostImage {
-  id         String           @id @default(uuid()) @db.Uuid
-  postId     String           @map("post_id") @db.Uuid
-  imageUrl   String           @map("image_url")
-  sortOrder  Int              @default(0) @map("sort_order")
-  createdAt  DateTime         @default(now()) @map("created_at")
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  imageUrl  String   @map("image_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
   post       PetPost          @relation(fields: [postId], references: [id])
   embeddings ImageEmbedding[]
 
@@ -351,7 +352,8 @@ model ImageEmbedding {
   modelVersion String?                    @map("model_version") @db.VarChar(50)
   dimension    Int
   createdAt    DateTime                   @default(now()) @map("created_at")
-  postImage    PostImage                  @relation(fields: [postImageId], references: [id])
+
+  postImage PostImage @relation(fields: [postImageId], references: [id], onDelete: Cascade)
 
   @@unique([postImageId, modelName])
   @@index([postImageId])

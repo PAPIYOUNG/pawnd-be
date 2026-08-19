@@ -123,8 +123,8 @@ export class AiMatchingService {
           finalScore,
           distanceKm,
 
-          modelName: 'PAWND_MATCHING_V1',
-          modelVersion: '1.0',
+          modelName: 'PAWND_MATCHING_V2',
+          modelVersion: '2.0',
         },
 
         update: {
@@ -136,8 +136,8 @@ export class AiMatchingService {
           finalScore,
           distanceKm,
 
-          modelName: 'PAWND_MATCHING_V1',
-          modelVersion: '1.0',
+          modelName: 'PAWND_MATCHING_V2',
+          modelVersion: '2.0',
         },
       });
 
@@ -152,6 +152,209 @@ export class AiMatchingService {
       totalCandidates: candidates.length,
       totalMatches: results.length,
       matches: results,
+    };
+  }
+
+  async getPostMatches(postId: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: {
+        id: postId,
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const matches = await this.prisma.aiMatch.findMany({
+      where: {
+        OR: [{ lostPostId: postId }, { foundPostId: postId }],
+      },
+
+      include: {
+        lostPost: {
+          include: {
+            images: true,
+          },
+        },
+
+        foundPost: {
+          include: {
+            images: true,
+          },
+        },
+      },
+
+      orderBy: {
+        finalScore: 'desc',
+      },
+    });
+
+    const results = matches.map((match) => {
+      const matchedPost =
+        match.lostPostId === postId ? match.foundPost : match.lostPost;
+
+      return {
+        matchId: match.id,
+
+        matchedPost,
+
+        scores: {
+          vectorSimilarity: match.vectorSimilarity,
+          featureScore: match.featureScore,
+          locationScore: match.locationScore,
+          dateScore: match.dateScore,
+          finalScore: match.finalScore,
+          distanceKm: match.distanceKm,
+        },
+
+        isNotified: match.isNotified,
+        createdAt: match.createdAt,
+        updatedAt: match.updatedAt,
+      };
+    });
+
+    return {
+      postId,
+      totalMatches: results.length,
+      matches: results,
+    };
+  }
+
+  async getMatchDetail(matchId: string) {
+    const match = await this.prisma.aiMatch.findUnique({
+      where: {
+        id: matchId,
+      },
+
+      include: {
+        lostPost: {
+          include: {
+            images: {
+              orderBy: {
+                sortOrder: 'asc',
+              },
+            },
+          },
+        },
+
+        foundPost: {
+          include: {
+            images: {
+              orderBy: {
+                sortOrder: 'asc',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!match) {
+      throw new NotFoundException('AI match not found');
+    }
+
+    return {
+      matchId: match.id,
+
+      lostPost: {
+        id: match.lostPost.id,
+        type: match.lostPost.type,
+        status: match.lostPost.status,
+
+        petName: match.lostPost.petName,
+        petType: match.lostPost.petType,
+
+        breed: match.lostPost.breed,
+        gender: match.lostPost.gender,
+        color: match.lostPost.color,
+
+        distinctiveFeatures: match.lostPost.distinctiveFeatures,
+
+        description: match.lostPost.description,
+
+        eventDate: match.lostPost.eventDate,
+
+        latitude: match.lostPost.latitude,
+
+        longitude: match.lostPost.longitude,
+
+        province: match.lostPost.province,
+
+        district: match.lostPost.district,
+
+        subdistrict: match.lostPost.subdistrict,
+
+        locationDescription: match.lostPost.locationDescription,
+
+        images: match.lostPost.images.map((image) => ({
+          id: image.id,
+          imageUrl: image.imageUrl,
+          sortOrder: image.sortOrder,
+        })),
+      },
+
+      foundPost: {
+        id: match.foundPost.id,
+        type: match.foundPost.type,
+        status: match.foundPost.status,
+
+        petName: match.foundPost.petName,
+        petType: match.foundPost.petType,
+
+        breed: match.foundPost.breed,
+        gender: match.foundPost.gender,
+        color: match.foundPost.color,
+
+        distinctiveFeatures: match.foundPost.distinctiveFeatures,
+
+        description: match.foundPost.description,
+
+        eventDate: match.foundPost.eventDate,
+
+        latitude: match.foundPost.latitude,
+
+        longitude: match.foundPost.longitude,
+
+        province: match.foundPost.province,
+
+        district: match.foundPost.district,
+
+        subdistrict: match.foundPost.subdistrict,
+
+        locationDescription: match.foundPost.locationDescription,
+
+        images: match.foundPost.images.map((image) => ({
+          id: image.id,
+          imageUrl: image.imageUrl,
+          sortOrder: image.sortOrder,
+        })),
+      },
+
+      scores: {
+        vectorSimilarity: match.vectorSimilarity,
+
+        featureScore: match.featureScore,
+
+        locationScore: match.locationScore,
+
+        dateScore: match.dateScore,
+
+        finalScore: match.finalScore,
+
+        distanceKm: match.distanceKm,
+      },
+
+      model: {
+        name: match.modelName,
+        version: match.modelVersion,
+      },
+
+      isNotified: match.isNotified,
+
+      createdAt: match.createdAt,
+
+      updatedAt: match.updatedAt,
     };
   }
 
@@ -340,11 +543,26 @@ export class AiMatchingService {
      * Date              = 10%
      */
 
+    // const score =
+    //   input.vectorSimilarity * 0.5 +
+    //   input.featureScore * 0.2 +
+    //   input.locationScore * 0.2 +
+    //   input.dateScore * 0.1;
+
+    /**
+     * Weight V2
+     *
+     * Vector   30%
+     * Feature  30%
+     * Location 25%
+     * Date     15%
+     */
+
     const score =
-      input.vectorSimilarity * 0.5 +
-      input.featureScore * 0.2 +
-      input.locationScore * 0.2 +
-      input.dateScore * 0.1;
+      input.vectorSimilarity * 0.3 +
+      input.featureScore * 0.3 +
+      input.locationScore * 0.25 +
+      input.dateScore * 0.15;
 
     return this.clamp(score);
   }

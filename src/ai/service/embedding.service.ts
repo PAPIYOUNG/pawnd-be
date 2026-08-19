@@ -29,7 +29,7 @@ export class EmbeddingService {
       'AI_IMAGE_EMBEDDING_MODEL',
     );
 
-    // เช็กก่อนว่าเคยสร้าง embedding ด้วย model นี้หรือยัง
+    // เช็กก่อนว่าเคยสร้าง embedding ด้วย model แล้วไหม?
     const existingEmbedding = await this.prisma.$queryRaw<
       Array<{ id: string }>
     >`
