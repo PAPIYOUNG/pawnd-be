@@ -17,6 +17,7 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
 
 import { PostEventsModule } from './post-events/post-events.module';
+import { FlyerModule } from './flyer/flyer.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { PostEventsModule } from './post-events/post-events.module';
     PetModule,
     PetQrModule,
     PostEventsModule,
+    FlyerModule,
   ],
   controllers: [],
   providers: [

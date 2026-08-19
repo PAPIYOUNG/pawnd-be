@@ -52,6 +52,27 @@ export class CloudinaryService {
     });
   }
 
+  uploadFlyerPdf(pdfBuffer: Buffer, postId: string): Promise<string> {
+    return this.uploadBuffer(pdfBuffer, {
+      resource_type: 'raw',
+      folder: 'pawnd/flyers',
+      public_id: `${postId}-${Date.now()}.pdf`,
+      overwrite: true,
+      invalidate: true,
+    });
+  }
+
+  uploadFlyerQrCode(qrBuffer: Buffer, postId: string): Promise<string> {
+    return this.uploadBuffer(qrBuffer, {
+      resource_type: 'image',
+      folder: 'pawnd/flyer-qr',
+      public_id: postId,
+      overwrite: true,
+      invalidate: true,
+      format: 'png',
+    });
+  }
+
   private uploadBuffer(
     buffer: Buffer,
     options: UploadApiOptions = {},
