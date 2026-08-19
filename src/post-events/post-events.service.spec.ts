@@ -2,6 +2,7 @@
 
 import { NotFoundException } from '@nestjs/common';
 
+import type { Prisma } from '../database/generated/prisma/client';
 import { PostEventType, PostStatus } from '../database/generated/prisma/enums';
 import type { PrismaService } from '../database/prisma.service';
 import { PostEventsService } from './post-events.service';
@@ -12,18 +13,96 @@ jest.mock('../database/prisma.service', () => ({
 
 describe('PostEventsService', () => {
   let service: PostEventsService;
+  const injectedCreatePostEvent = jest.fn();
   const prisma = {
     petPost: {
       findUnique: jest.fn(),
     },
     postEvent: {
       findMany: jest.fn(),
+      create: injectedCreatePostEvent,
     },
   };
+
+  function createTransactionClient() {
+    const createPostEvent = jest.fn();
+    const client = {
+      postEvent: {
+        create: createPostEvent,
+      },
+    } as unknown as Pick<Prisma.TransactionClient, 'postEvent'>;
+
+    return { client, createPostEvent };
+  }
 
   beforeEach(() => {
     jest.resetAllMocks();
     service = new PostEventsService(prisma as unknown as PrismaService);
+  });
+
+  describe('recordEvent', () => {
+    it('creates an event with the supplied post, type, and creator', async () => {
+      const { client, createPostEvent } = createTransactionClient();
+      const createdEvent = { id: 'event-id' };
+      createPostEvent.mockResolvedValue(createdEvent);
+
+      await expect(
+        service.recordEvent(client, {
+          postId: '00000000-0000-4000-8000-000000000010',
+          eventType: PostEventType.REUNITED,
+          createdBy: '00000000-0000-4000-8000-000000000020',
+        }),
+      ).resolves.toBe(createdEvent);
+      expect(createPostEvent).toHaveBeenCalledWith({
+        data: {
+          postId: '00000000-0000-4000-8000-000000000010',
+          eventType: PostEventType.REUNITED,
+          createdBy: '00000000-0000-4000-8000-000000000020',
+        },
+      });
+    });
+
+    it('stores null when createdBy is omitted', async () => {
+      const { client, createPostEvent } = createTransactionClient();
+
+      await service.recordEvent(client, {
+        postId: '00000000-0000-4000-8000-000000000010',
+        eventType: PostEventType.POST_CREATED,
+      });
+
+      expect(createPostEvent).toHaveBeenCalledWith({
+        data: {
+          postId: '00000000-0000-4000-8000-000000000010',
+          eventType: PostEventType.POST_CREATED,
+          createdBy: null,
+        },
+      });
+    });
+
+    it('uses the supplied transaction client instead of PrismaService', async () => {
+      const { client, createPostEvent } = createTransactionClient();
+
+      await service.recordEvent(client, {
+        postId: '00000000-0000-4000-8000-000000000010',
+        eventType: PostEventType.AI_MATCHES_FOUND,
+      });
+
+      expect(createPostEvent).toHaveBeenCalledTimes(1);
+      expect(injectedCreatePostEvent).not.toHaveBeenCalled();
+    });
+
+    it('propagates database errors', async () => {
+      const { client, createPostEvent } = createTransactionClient();
+      const databaseError = new Error('database unavailable');
+      createPostEvent.mockRejectedValue(databaseError);
+
+      await expect(
+        service.recordEvent(client, {
+          postId: '00000000-0000-4000-8000-000000000010',
+          eventType: PostEventType.POST_CLOSED,
+        }),
+      ).rejects.toBe(databaseError);
+    });
   });
 
   it.each([PostStatus.ACTIVE, PostStatus.REUNITED, PostStatus.CLOSED])(

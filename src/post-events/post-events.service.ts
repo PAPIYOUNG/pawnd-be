@@ -1,7 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
-import { PostStatus } from '../database/generated/prisma/enums';
+import type { Prisma } from '../database/generated/prisma/client';
+import { PostEventType, PostStatus } from '../database/generated/prisma/enums';
 import { PrismaService } from '../database/prisma.service';
+
+export type RecordPostEventInput = {
+  postId: string;
+  eventType: PostEventType;
+  createdBy?: string | null;
+};
+
+type PostEventDatabaseClient = Pick<Prisma.TransactionClient, 'postEvent'>;
 
 const PUBLIC_POST_STATUSES: PostStatus[] = [
   PostStatus.ACTIVE,
@@ -12,6 +21,17 @@ const PUBLIC_POST_STATUSES: PostStatus[] = [
 @Injectable()
 export class PostEventsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // Caller validates business rules and uses the same transaction as the domain action.
+  recordEvent(client: PostEventDatabaseClient, input: RecordPostEventInput) {
+    return client.postEvent.create({
+      data: {
+        postId: input.postId,
+        eventType: input.eventType,
+        createdBy: input.createdBy ?? null,
+      },
+    });
+  }
 
   async getPostEvents(postId: string) {
     const post = await this.prisma.petPost.findUnique({

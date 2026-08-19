@@ -5,5 +5,6 @@ import { PostEventsService } from './post-events.service';
 @Module({
   controllers: [PostEventsController],
   providers: [PostEventsService],
+  exports: [PostEventsService],
 })
 export class PostEventsModule {}
