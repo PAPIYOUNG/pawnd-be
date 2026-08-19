@@ -154,18 +154,41 @@ export class PetService {
   async deletePet(ownerId: string, petId: string) {
     const existing = await this.prisma.pet.findFirst({
       where: { id: petId, ownerId },
-      select: { id: true },
+      include: {
+        images: {
+          select: { imageUrl: true },
+        },
+      },
     });
 
     if (!existing) {
       throw new NotFoundException('Pet not found');
     }
 
+    const imageUrls = existing.images?.map((img) => img.imageUrl) || [];
+
     await this.prisma.$transaction(async (tx) => {
       await tx.petImage.deleteMany({ where: { petId } });
       await tx.petQrCode.deleteMany({ where: { petId } });
       await tx.pet.delete({ where: { id: petId } });
     });
+
+    try {
+      await this.cloudinaryService.deletePetQrCode(petId);
+    } catch {
+      // Ignore Cloudinary cleanup failure if no QR was uploaded
+    }
+
+    for (const url of imageUrls) {
+      const publicId = this.extractPublicIdFromUrl(url);
+      if (publicId) {
+        try {
+          await this.cloudinaryService.deleteAsset(publicId, 'image');
+        } catch {
+          // Ignore Cloudinary cleanup failure
+        }
+      }
+    }
 
     return { message: 'Pet deleted successfully' };
   }
@@ -297,7 +320,21 @@ export class PetService {
       }
     });
 
+    const publicId = this.extractPublicIdFromUrl(image.imageUrl);
+    if (publicId) {
+      try {
+        await this.cloudinaryService.deleteAsset(publicId, 'image');
+      } catch {
+        // Ignore Cloudinary cleanup failure
+      }
+    }
+
     return { message: 'Image deleted successfully' };
+  }
+
+  private extractPublicIdFromUrl(url: string): string | null {
+    const match = url.match(/\/upload\/(?:v\d+\/)?([^\.]+)/);
+    return match ? match[1] : null;
   }
 
   async setProfileImage(ownerId: string, petId: string, imageId: string) {

@@ -36,6 +36,8 @@ describe('PetService', () => {
 
   const mockCloudinaryService = {
     upload: jest.fn(),
+    deletePetQrCode: jest.fn(),
+    deleteAsset: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -341,13 +343,25 @@ describe('PetService', () => {
       const ownerId = '550e8400-e29b-41d4-a716-446655440000';
       const petId = '660e8400-e29b-41d4-a716-446655440001';
 
-      mockPrismaService.pet.findFirst.mockResolvedValue({ id: petId });
+      mockPrismaService.pet.findFirst.mockResolvedValue({
+        id: petId,
+        images: [
+          {
+            imageUrl:
+              'https://res.cloudinary.com/demo/image/upload/v1234567890/pawnd/pets/img1.jpg',
+          },
+        ],
+      });
 
       const result = await service.deletePet(ownerId, petId);
 
       expect(mockPrismaService.pet.findFirst).toHaveBeenCalledWith({
         where: { id: petId, ownerId },
-        select: { id: true },
+        include: {
+          images: {
+            select: { imageUrl: true },
+          },
+        },
       });
       expect(mockPrismaService.petImage.deleteMany).toHaveBeenCalledWith({
         where: { petId },
@@ -358,6 +372,11 @@ describe('PetService', () => {
       expect(mockPrismaService.pet.delete).toHaveBeenCalledWith({
         where: { id: petId },
       });
+      expect(mockCloudinaryService.deletePetQrCode).toHaveBeenCalledWith(petId);
+      expect(mockCloudinaryService.deleteAsset).toHaveBeenCalledWith(
+        'pawnd/pets/img1',
+        'image',
+      );
       expect(result).toEqual({ message: 'Pet deleted successfully' });
     });
 
@@ -432,15 +451,17 @@ describe('PetService', () => {
       const ownerId = '550e8400-e29b-41d4-a716-446655440000';
       const petId = '660e8400-e29b-41d4-a716-446655440001';
 
-      await expect(
-        service.uploadPetImages(ownerId, petId, []),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadPetImages(ownerId, petId, [])).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw NotFoundException if pet not found on upload', async () => {
       const ownerId = '550e8400-e29b-41d4-a716-446655440000';
       const petId = '660e8400-e29b-41d4-a716-446655440001';
-      const mockFiles = [{ buffer: Buffer.from('test') }] as Express.Multer.File[];
+      const mockFiles = [
+        { buffer: Buffer.from('test') },
+      ] as Express.Multer.File[];
 
       mockPrismaService.pet.findFirst.mockResolvedValue(null);
 
@@ -463,7 +484,8 @@ describe('PetService', () => {
       mockPrismaService.petImage.findFirst.mockResolvedValue({
         id: imageId,
         petId,
-        imageUrl: 'https://cloudinary.com/img1.jpg',
+        imageUrl:
+          'https://res.cloudinary.com/demo/image/upload/v1234567890/pawnd/pets/img1.jpg',
         isProfile: false,
       });
 
@@ -472,6 +494,10 @@ describe('PetService', () => {
       expect(mockPrismaService.petImage.delete).toHaveBeenCalledWith({
         where: { id: imageId },
       });
+      expect(mockCloudinaryService.deleteAsset).toHaveBeenCalledWith(
+        'pawnd/pets/img1',
+        'image',
+      );
       expect(result).toEqual({ message: 'Image deleted successfully' });
     });
 

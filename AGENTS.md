@@ -27,10 +27,11 @@ AI ต้องดำเนินการตามลำดับต่อไ�
 1. อ่าน `AGENTS.md` ทั้งหมด
 2. อ่าน ticket, Acceptance Criteria และ requirement ที่เกี่ยวข้อง
 3. ตรวจ `git status` และ branch ปัจจุบัน
-4. ตรวจโครงสร้างไฟล์และค้นหา implementation เดิมก่อนสร้างไฟล์ใหม่
-5. อ่าน Prisma schema, DTO, enum, guard, interceptor และ shared utility ที่เกี่ยวข้อง
-6. สรุปขอบเขตงานและไฟล์ที่คาดว่าจะได้รับผลกระทบแบบสั้น ๆ
-7. หาก requirement ไม่ชัดหรือขัดกัน ให้ถามก่อนลงมือ ห้ามเดา business rule
+4. ตรวจโครงสร้างไฟล์และค้นหา implementation เดิมใน `src/infrastructure/`, `src/common/` และโมดูลของเพื่อนร่วมทีม เพื่อนำ service, adapter, helper, decorator มาใช้งานร่วมกัน ห้ามสร้างซ้ำหรือละเลยสิ่งที่มีอยู่
+5. หากฟีเจอร์เกี่ยวข้องกับ Asset (รูปภาพ/วิดีโอ) หรือ Entity ที่มี Asset ต้องวางแผน Asset Cleanup Strategy (เช่น เรียก `deleteAsset` ของ Cloudinary) ร่วมกับ Database Transaction ให้ครบถ้วน ห้ามปล่อยให้เกิดไฟล์ขยะ (Orphaned Assets) บน Cloud Storage
+6. อ่าน Prisma schema, DTO, enum, guard, interceptor และ shared utility ที่เกี่ยวข้อง
+7. สรุปขอบเขตงาน, ไฟล์ที่คาดว่าจะได้รับผลกระทบ และ Shared Services/Cleanups ที่จะนำมาใช้แบบสั้น ๆ
+8. หาก requirement ไม่ชัดหรือขัดกัน ให้ถามก่อนลงมือ ห้ามเดา business rule
 
 ### 2.2 Source of truth
 
@@ -272,8 +273,8 @@ prisma/
 - Video ทุก feature ต้องมีขนาดไม่เกิน **5 MB**
 - ห้ามเชื่อ filename หรือ MIME จาก client เพียงอย่างเดียวหากระบบมีวิธีตรวจเพิ่ม
 - เก็บเฉพาะ asset metadata/URL ที่จำเป็นใน database
-- การลบ entity ที่มี asset ต้องกำหนด cleanup strategy และไม่ลบ asset ของ resource อื่น
-- เรียก upload/delete ผ่าน asset service กลาง เช่น Cloudinary adapter ที่มีอยู่
+- **การลบ entity ที่มี asset หรือการลบรูปภาพเดี่ยว**: ต้องกำหนด cleanup strategy ดึง URL/publicId แล้วเรียก asset service กลาง (`deleteAsset`) เพื่อลบไฟล์จริงออกจาก Storage ทุกครั้ง ห้ามลบเฉพาะ record ใน database
+- เรียก upload/delete ผ่าน asset service กลาง เช่น Cloudinary adapter ที่มีอยู่ ห้ามเรียก SDK ภายนอกตรงๆ ข้าม feature
 
 ### 5.6 Security และ privacy
 
