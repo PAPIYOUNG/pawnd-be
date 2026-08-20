@@ -10,6 +10,7 @@ import { PrismaService } from '@/database/prisma.service';
 import { PetQrResponseDto } from './dto/pet-qr-response.dto';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import { PublicPetProfileResponseDto } from '@/pet-qr/dto/public-pet-profile-response.dto';
+import { PetProfilePdfGenerator } from './generators/pet-profile-pdf.generator';
 
 @Injectable()
 export class PetQrService {
@@ -173,6 +174,43 @@ export class PetQrService {
     };
   }
 
+  async generatePublicPetProfilePdf(qrToken: string): Promise<Buffer> {
+    const profile = await this.getPublicPetProfile(qrToken);
+
+    const profileImageBuffer = await this.fetchImageBuffer(
+      profile.profileImageUrl,
+    );
+
+    const otherImages = profile.images.filter(
+      (image) => image.imageUrl !== profile.profileImageUrl,
+    );
+    const otherImageBuffers: Buffer[] = [];
+    for (const image of otherImages.slice(0, 4)) {
+      const buffer = await this.fetchImageBuffer(image.imageUrl);
+      if (buffer) {
+        otherImageBuffers.push(buffer);
+      }
+    }
+
+    return PetProfilePdfGenerator.generate({
+      id: profile.id,
+      name: profile.name,
+      type: profile.type,
+      breed: profile.breed,
+      gender: profile.gender,
+      color: profile.color,
+      age: profile.age,
+      distinctiveFeatures: profile.distinctiveFeatures,
+      description: profile.description,
+      profileImageBuffer,
+      otherImageBuffers,
+      ownerName: profile.ownerContact.name,
+      ownerPhone: profile.ownerContact.phone,
+      ownerLineId: profile.ownerContact.lineId,
+      ownerEmail: profile.ownerContact.email,
+    });
+  }
+
   async deactivatePetQrCode(
     petId: string,
     userId: string,
@@ -301,6 +339,35 @@ export class PetQrService {
     const frontendUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
 
     return `${frontendUrl.replace(/\/$/, '')}/pet/qr/${qrToken}`;
+  }
+
+  // pdfkit อ่านได้แค่ JPEG/PNG เท่านั้น รูปที่อัปโหลดเป็น WebP ต้องสั่ง Cloudinary แปลงให้ก่อน
+  private toPdfSafeImageUrl(url: string): string {
+    const marker = '/image/upload/';
+    const markerIndex = url.indexOf(marker);
+    if (markerIndex === -1) {
+      return url;
+    }
+
+    const insertAt = markerIndex + marker.length;
+    return `${url.slice(0, insertAt)}f_jpg/${url.slice(insertAt)}`;
+  }
+
+  private async fetchImageBuffer(url?: string | null): Promise<Buffer | null> {
+    if (!url) {
+      return null;
+    }
+
+    try {
+      const res = await fetch(this.toPdfSafeImageUrl(url));
+      if (!res.ok) {
+        return null;
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch {
+      return null;
+    }
   }
 
   private generateQrImage(publicProfileUrl: string): Promise<Buffer> {

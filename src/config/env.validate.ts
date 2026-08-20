@@ -29,6 +29,13 @@ const envSchema = z.object({
     .min(1000)
     .max(10000)
     .default(5000),
+  OPENROUTER_API_KEY: z.string().min(1),
+  OPENROUTER_BASE_URL: z.string().min(1),
+  AI_ANALYZE_IMAGE_MODEL: z.string().min(1),
+  AI_ANALYZE_IMAGE_MODEL_FREE: z.string().min(1),
+  AI_IMAGE_EMBEDDING_MODEL: z.string().min(1),
+  AI_IMAGE_EMBEDDING_DIMENSION: z.coerce.number().int().positive(),
+  AI_PET_AVATAR_MODEL: z.string().min(1),
 });
 
 export function validate(config: Record<string, any>) {

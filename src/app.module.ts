@@ -21,6 +21,8 @@ import { UsersModule } from './users/users.module';
 import { PostEventsModule } from './post-events/post-events.module';
 import { FlyerModule } from './flyer/flyer.module';
 
+import { AiModule } from './ai/ai.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -36,6 +38,8 @@ import { FlyerModule } from './flyer/flyer.module';
     UsersModule,
     PostEventsModule,
     FlyerModule,
+    DatabaseModule,
+    AiModule,
   ],
   controllers: [],
   providers: [

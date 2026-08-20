@@ -1,13 +1,17 @@
 import {
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { PetQrResponseDto } from './dto/pet-qr-response.dto';
@@ -39,6 +43,24 @@ export class PetQrController {
   @Get('public/qr/:qrToken')
   getPublicPetProfile(@Param('qrToken') qrToken: string) {
     return this.petQrService.getPublicPetProfile(qrToken);
+  }
+
+  @Public()
+  @Get('public/qr/:qrToken/pdf')
+  @Header('Content-Type', 'application/pdf')
+  async downloadPublicPetProfilePdf(
+    @Param('qrToken') qrToken: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const buffer = await this.petQrService.generatePublicPetProfilePdf(qrToken);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="pet-profile-${qrToken}.pdf"`,
+      'Content-Length': buffer.length.toString(),
+    });
+
+    return new StreamableFile(buffer);
   }
 
   @Get(':id/qr')
