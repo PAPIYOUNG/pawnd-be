@@ -25,7 +25,6 @@ export class AiController {
     private readonly petAvatarService: PetAvatarService,
   ) {}
 
-  @Public()
   @Get('test')
   testConnection() {
     return this.aiService.testConnection();
