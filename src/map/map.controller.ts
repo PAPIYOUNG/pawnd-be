@@ -3,6 +3,9 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { Public } from '@/common/decorators/public.decorator';
 import { MapPostQueryDto } from './dto/map-post-query.dto';
 import { NearbyPostQueryDto } from './dto/nearby-post-query.dto';
+import { ReverseGeocodeQueryDto } from './dto/reverse-geocode-query.dto';
+import { ReverseGeocodeResult } from './geocoding/geocoding-provider';
+import { ReverseGeocodingService } from './geocoding/reverse-geocoding.service';
 import {
   MapPostFeatureCollection,
   MapService,
@@ -11,7 +14,17 @@ import {
 
 @Controller('map')
 export class MapController {
-  constructor(private readonly mapService: MapService) {}
+  constructor(
+    private readonly mapService: MapService,
+    private readonly reverseGeocodingService: ReverseGeocodingService,
+  ) {}
+
+  @Get('reverse-geocode')
+  reverseGeocode(
+    @Query() query: ReverseGeocodeQueryDto,
+  ): Promise<ReverseGeocodeResult> {
+    return this.reverseGeocodingService.reverseGeocode(query);
+  }
 
   @Public()
   @Get('posts/nearby')

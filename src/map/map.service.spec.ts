@@ -11,6 +11,7 @@ import {
 import type { PrismaService } from '@/database/prisma.service';
 import { MapPostQueryDto } from './dto/map-post-query.dto';
 import { NearbyPostQueryDto } from './dto/nearby-post-query.dto';
+import { ReverseGeocodeQueryDto } from './dto/reverse-geocode-query.dto';
 import { MapService } from './map.service';
 
 jest.mock('@/database/prisma.service', () => ({
@@ -95,6 +96,52 @@ describe('NearbyPostQueryDto', () => {
     });
 
     expect(await validate(dto)).not.toHaveLength(0);
+  });
+});
+
+describe('ReverseGeocodeQueryDto', () => {
+  const validQuery = {
+    latitude: '13.7563',
+    longitude: '100.5018',
+  };
+
+  it('transforms coordinates and defaults language to Thai', async () => {
+    const dto = plainToInstance(ReverseGeocodeQueryDto, validQuery);
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto).toMatchObject({
+      latitude: 13.7563,
+      longitude: 100.5018,
+      language: 'th',
+    });
+  });
+
+  it.each([
+    ['missing latitude', { latitude: undefined }],
+    ['missing longitude', { longitude: undefined }],
+    ['blank latitude', { latitude: ' ' }],
+    ['blank longitude', { longitude: '' }],
+    ['latitude below range', { latitude: '-91' }],
+    ['latitude above range', { latitude: '91' }],
+    ['longitude below range', { longitude: '-181' }],
+    ['longitude above range', { longitude: '181' }],
+    ['unsupported language', { language: 'fr' }],
+  ])('rejects an invalid %s', async (_caseName, invalidValue) => {
+    const dto = plainToInstance(ReverseGeocodeQueryDto, {
+      ...validQuery,
+      ...invalidValue,
+    });
+
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it.each(['th', 'en'])('accepts the %s language', async (language) => {
+    const dto = plainToInstance(ReverseGeocodeQueryDto, {
+      ...validQuery,
+      language,
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
   });
 });
 

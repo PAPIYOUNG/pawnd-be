@@ -2,6 +2,9 @@ import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { PetType, PostType } from '@/database/generated/prisma/enums';
 import { MapPostQueryDto } from './dto/map-post-query.dto';
 import { NearbyPostQueryDto } from './dto/nearby-post-query.dto';
+import { ReverseGeocodeQueryDto } from './dto/reverse-geocode-query.dto';
+import { ReverseGeocodeResult } from './geocoding/geocoding-provider';
+import { ReverseGeocodingService } from './geocoding/reverse-geocoding.service';
 import { MapController } from './map.controller';
 import {
   MapPostFeatureCollection,
@@ -17,6 +20,8 @@ describe('MapController', () => {
   const getMapPosts = jest.fn();
   const getNearbyPosts = jest.fn();
   const mapService = { getMapPosts, getNearbyPosts };
+  const reverseGeocode = jest.fn();
+  const reverseGeocodingService = { reverseGeocode };
   let controller: MapController;
 
   const query: MapPostQueryDto = {
@@ -71,7 +76,10 @@ describe('MapController', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    controller = new MapController(mapService as unknown as MapService);
+    controller = new MapController(
+      mapService as unknown as MapService,
+      reverseGeocodingService as unknown as ReverseGeocodingService,
+    );
   });
 
   it('delegates the query to MapService', async () => {
@@ -123,6 +131,50 @@ describe('MapController', () => {
       ) as TypedPropertyDescriptor<MapController['getNearbyPosts']>;
 
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, descriptor.value!)).toBe(true);
+    });
+  });
+
+  describe('reverseGeocode', () => {
+    const reverseQuery: ReverseGeocodeQueryDto = {
+      latitude: 13.7563,
+      longitude: 100.5018,
+      language: 'th',
+    };
+    const result: ReverseGeocodeResult = {
+      displayName: 'Bangkok, Thailand',
+      address: {
+        road: null,
+        neighbourhood: null,
+        subdistrict: null,
+        district: 'Bangkok',
+        province: 'Bangkok',
+        postcode: null,
+        country: 'Thailand',
+        countryCode: 'th',
+      },
+      source: 'nominatim',
+      attribution: 'Data © OpenStreetMap contributors',
+    };
+
+    it('delegates the query to ReverseGeocodingService', async () => {
+      reverseGeocode.mockResolvedValue(result);
+
+      await expect(controller.reverseGeocode(reverseQuery)).resolves.toBe(
+        result,
+      );
+
+      expect(reverseGeocode).toHaveBeenCalledWith(reverseQuery);
+    });
+
+    it('does not mark the endpoint as public', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        MapController.prototype,
+        'reverseGeocode',
+      ) as TypedPropertyDescriptor<MapController['reverseGeocode']>;
+
+      expect(
+        Reflect.getMetadata(IS_PUBLIC_KEY, descriptor.value!),
+      ).toBeUndefined();
     });
   });
 });
