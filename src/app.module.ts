@@ -19,6 +19,7 @@ import { UsersModule } from './users/users.module';
 
 import { PostEventsModule } from './post-events/post-events.module';
 import { FlyerModule } from './flyer/flyer.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { FlyerModule } from './flyer/flyer.module';
     UsersModule,
     PostEventsModule,
     FlyerModule,
+    HomeModule,
   ],
   controllers: [],
   providers: [

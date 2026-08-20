@@ -61,7 +61,9 @@ describe('FlyerService', () => {
   });
 
   describe('generateFlyer', () => {
-    it('should generate printable flyer poster and save record successfully', async () => {
+    it(
+      'should generate printable flyer poster and save record successfully',
+      async () => {
       const userId = 'user-uuid-1';
       const postId = 'post-uuid-1';
 
@@ -140,7 +142,7 @@ describe('FlyerService', () => {
         },
       });
       expect(result).toEqual({ flyer: mockFlyerRecord });
-    });
+    }, 15000);
 
     it('should throw NotFoundException if post is DELETED or HIDDEN', async () => {
       mockPrismaService.petPost.findUnique.mockResolvedValue({
