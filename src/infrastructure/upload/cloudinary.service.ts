@@ -40,6 +40,14 @@ export class CloudinaryService {
       Readable.from(file.buffer).pipe(writableStream);
     });
   }
+  async uploadBase64(dataUrl: string, folder: string): Promise<string> {
+    const result = await cloudinary.uploader.upload(dataUrl, {
+      folder,
+      resource_type: 'image',
+    });
+
+    return result.secure_url;
+  }
 
   uploadPetQrCode(qrBuffer: Buffer, petId: string): Promise<string> {
     return this.uploadBuffer(qrBuffer, {

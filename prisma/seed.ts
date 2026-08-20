@@ -190,6 +190,20 @@ const TEST_IMAGE_IDS = {
 };
 
 // =========================================================
+// PET AVATAR TEST IDS
+// =========================================================
+
+const TEST_PET_IDS = {
+  makhamPiak: '66666666-6666-4666-8666-666666666666',
+};
+
+const TEST_PET_IMAGE_IDS = {
+  makhamPiak1: '67777777-7777-4777-8777-777777777771',
+  makhamPiak2: '67777777-7777-4777-8777-777777777772',
+  makhamPiak3: '67777777-7777-4777-8777-777777777773',
+};
+
+// =========================================================
 // MAIN
 // =========================================================
 
@@ -197,6 +211,7 @@ async function main() {
   await seedUsersAndPets();
   await seedCredentialTestUser();
   await seedAiMatchingPosts();
+  await seedPetAvatarTestData();
 
   console.log('✅ Database seed completed');
 }
@@ -283,7 +298,6 @@ async function seedCredentialTestUser() {
 
   if (!email || !password) {
     console.log('⏭️ Skipped credential test user');
-
     return;
   }
 
@@ -352,7 +366,6 @@ async function seedAiMatchingPosts() {
 
   // =========================================================
   // POST 1 - LOST - มาวิน
-  // สีส้มอ่อน
   // =========================================================
 
   await prisma.petPost.upsert({
@@ -362,7 +375,6 @@ async function seedAiMatchingPosts() {
 
     update: {
       userId: owner.id,
-
       type: PostType.LOST,
       status: PostStatus.ACTIVE,
 
@@ -392,7 +404,6 @@ async function seedAiMatchingPosts() {
 
     create: {
       id: TEST_POST_IDS.mawinLost,
-
       userId: owner.id,
 
       type: PostType.LOST,
@@ -425,7 +436,6 @@ async function seedAiMatchingPosts() {
 
   // =========================================================
   // POST 2 - FOUND - แมวจร
-  // สีสลิด
   // =========================================================
 
   await prisma.petPost.upsert({
@@ -435,7 +445,6 @@ async function seedAiMatchingPosts() {
 
     update: {
       userId: owner.id,
-
       type: PostType.FOUND,
       status: PostStatus.ACTIVE,
 
@@ -465,7 +474,6 @@ async function seedAiMatchingPosts() {
 
     create: {
       id: TEST_POST_IDS.strayFound,
-
       userId: owner.id,
 
       type: PostType.FOUND,
@@ -498,8 +506,6 @@ async function seedAiMatchingPosts() {
 
   // =========================================================
   // POST 3 - LOST - ซัมเมอ
-  // มี 2 รูป
-  // Ground Truth คู่กับ POST 4
   // =========================================================
 
   await prisma.petPost.upsert({
@@ -509,7 +515,6 @@ async function seedAiMatchingPosts() {
 
     update: {
       userId: owner.id,
-
       type: PostType.LOST,
       status: PostStatus.ACTIVE,
 
@@ -541,7 +546,6 @@ async function seedAiMatchingPosts() {
 
     create: {
       id: TEST_POST_IDS.summerLost,
-
       userId: owner.id,
 
       type: PostType.LOST,
@@ -576,7 +580,6 @@ async function seedAiMatchingPosts() {
 
   // =========================================================
   // POST 4 - FOUND - ซัมเมอ
-  // Ground Truth คู่กับ POST 3
   // =========================================================
 
   await prisma.petPost.upsert({
@@ -586,7 +589,6 @@ async function seedAiMatchingPosts() {
 
     update: {
       userId: owner.id,
-
       type: PostType.FOUND,
       status: PostStatus.ACTIVE,
 
@@ -618,7 +620,6 @@ async function seedAiMatchingPosts() {
 
     create: {
       id: TEST_POST_IDS.summerFound,
-
       userId: owner.id,
 
       type: PostType.FOUND,
@@ -655,110 +656,189 @@ async function seedAiMatchingPosts() {
   // POST IMAGES
   // =========================================================
 
-  // ---------------------------------------------------------
-  // มาวิน LOST
-  // ---------------------------------------------------------
-
   await upsertPostImage({
     id: TEST_IMAGE_IDS.mawin,
-
     postId: TEST_POST_IDS.mawinLost,
-
     imageUrl:
       'https://res.cloudinary.com/k8pidopz/image/upload/v1787091907/S__8069122_dtd5ye.jpg',
-
     sortOrder: 0,
   });
-
-  // ---------------------------------------------------------
-  // แมวจร FOUND
-  // ---------------------------------------------------------
 
   await upsertPostImage({
     id: TEST_IMAGE_IDS.stray,
-
     postId: TEST_POST_IDS.strayFound,
-
     imageUrl:
       'https://res.cloudinary.com/k8pidopz/image/upload/v1787091901/S__30564363_otkwzx.jpg',
-
     sortOrder: 0,
   });
-
-  // ---------------------------------------------------------
-  // ซัมเมอ LOST - รูปที่ 1
-  // ---------------------------------------------------------
 
   await upsertPostImage({
     id: TEST_IMAGE_IDS.summerLost1,
-
     postId: TEST_POST_IDS.summerLost,
-
     imageUrl:
       'https://res.cloudinary.com/k8pidopz/image/upload/v1787084843/S__30474245_mqsg3s.jpg',
-
     sortOrder: 0,
   });
 
-  // ---------------------------------------------------------
-  // ซัมเมอ LOST - รูปที่ 2
-  // ---------------------------------------------------------
-
   await upsertPostImage({
     id: TEST_IMAGE_IDS.summerLost2,
-
     postId: TEST_POST_IDS.summerLost,
-
     imageUrl:
       'https://res.cloudinary.com/k8pidopz/image/upload/v1787131810/S__30629891_g5sde6.jpg',
-
     sortOrder: 1,
   });
 
-  // ---------------------------------------------------------
-  // ซัมเมอ FOUND
-  // ---------------------------------------------------------
-
   await upsertPostImage({
     id: TEST_IMAGE_IDS.summerFound,
-
     postId: TEST_POST_IDS.summerFound,
-
     imageUrl:
       'https://res.cloudinary.com/k8pidopz/image/upload/v1787091896/S__30564361_xrd1da.jpg',
-
     sortOrder: 0,
   });
 
   console.log('✅ Seeded AI matching test data');
+}
+
+// =========================================================
+// PET AVATAR TEST DATA
+// =========================================================
+
+async function seedPetAvatarTestData() {
+  const owner = await prisma.user.findUnique({
+    where: {
+      email: 'alice.nguyen@example.com',
+    },
+  });
+
+  if (!owner) {
+    throw new Error('Pet avatar seed owner not found');
+  }
+
+  const pet = await prisma.pet.upsert({
+    where: {
+      id: TEST_PET_IDS.makhamPiak,
+    },
+
+    update: {
+      ownerId: owner.id,
+
+      name: 'นังมะขามเปียก',
+      type: PetType.CAT,
+
+      breed: 'Domestic Shorthair',
+      gender: PetGender.FEMALE,
+
+      color: 'สีส้ม',
+      age: 3,
+    },
+
+    create: {
+      id: TEST_PET_IDS.makhamPiak,
+
+      ownerId: owner.id,
+
+      name: 'นังมะขามเปียก',
+      type: PetType.CAT,
+
+      breed: 'Domestic Shorthair',
+      gender: PetGender.FEMALE,
+
+      color: 'สีส้ม',
+      age: 3,
+    },
+  });
+
+  await prisma.petImage.upsert({
+    where: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak1,
+    },
+
+    update: {
+      petId: pet.id,
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723357_ku3iyx.jpg',
+
+      isProfile: true,
+      sortOrder: 0,
+    },
+
+    create: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak1,
+      petId: pet.id,
+
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723357_ku3iyx.jpg',
+
+      isProfile: true,
+      sortOrder: 0,
+    },
+  });
+
+  await prisma.petImage.upsert({
+    where: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak2,
+    },
+
+    update: {
+      petId: pet.id,
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723359_x4zoyy.jpg',
+
+      isProfile: false,
+      sortOrder: 1,
+    },
+
+    create: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak2,
+      petId: pet.id,
+
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723359_x4zoyy.jpg',
+
+      isProfile: false,
+      sortOrder: 1,
+    },
+  });
+
+  await prisma.petImage.upsert({
+    where: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak3,
+    },
+
+    update: {
+      petId: pet.id,
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723358_ntkwni.jpg',
+
+      isProfile: false,
+      sortOrder: 2,
+    },
+
+    create: {
+      id: TEST_PET_IMAGE_IDS.makhamPiak3,
+      petId: pet.id,
+
+      imageUrl:
+        'https://res.cloudinary.com/k8pidopz/image/upload/v1787197653/S__10723358_ntkwni.jpg',
+
+      isProfile: false,
+      sortOrder: 2,
+    },
+  });
+
+  console.log('✅ Seeded Pet Avatar test data');
 
   console.log({
-    posts: {
-      mawinLost: TEST_POST_IDS.mawinLost,
-
-      strayFound: TEST_POST_IDS.strayFound,
-
-      summerLost: TEST_POST_IDS.summerLost,
-
-      summerFound: TEST_POST_IDS.summerFound,
+    pet: {
+      id: pet.id,
+      name: pet.name,
+      color: pet.color,
     },
 
     images: {
-      mawin: TEST_IMAGE_IDS.mawin,
-
-      stray: TEST_IMAGE_IDS.stray,
-
-      summerLost1: TEST_IMAGE_IDS.summerLost1,
-
-      summerLost2: TEST_IMAGE_IDS.summerLost2,
-
-      summerFound: TEST_IMAGE_IDS.summerFound,
-    },
-
-    expectedGroundTruth: {
-      lostPostId: TEST_POST_IDS.summerLost,
-
-      foundPostId: TEST_POST_IDS.summerFound,
+      profile: TEST_PET_IMAGE_IDS.makhamPiak1,
+      image2: TEST_PET_IMAGE_IDS.makhamPiak2,
+      image3: TEST_PET_IMAGE_IDS.makhamPiak3,
     },
   });
 }

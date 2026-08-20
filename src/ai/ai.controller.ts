@@ -1,7 +1,9 @@
 import { AiMatchingService } from '@/ai/ai-matching.service';
 import { AiService } from '@/ai/ai.service';
 import { AnalyzeImageDto } from '@/ai/dto/analyze-image.dto';
+import { GeneratePetAvatarDto } from '@/ai/dto/generate-pet-avatar.dto';
 import { EmbeddingService } from '@/ai/service/embedding.service';
+import { PetAvatarService } from '@/ai/service/pet-avatar.service';
 import { Public } from '@/common/decorators/public.decorator';
 import {
   Body,
@@ -20,6 +22,7 @@ export class AiController {
     private readonly aiService: AiService,
     private readonly aiMatchingService: AiMatchingService,
     private readonly embeddingService: EmbeddingService,
+    private readonly petAvatarService: PetAvatarService,
   ) {}
 
   @Public()
@@ -82,5 +85,13 @@ export class AiController {
     matchId: string,
   ) {
     return this.aiMatchingService.getMatchDetail(matchId);
+  }
+
+  @Post('generate-pet-avatar')
+  generatePetAvatar(
+    @Body()
+    dto: GeneratePetAvatarDto,
+  ) {
+    return this.petAvatarService.generatePetAvatar(dto);
   }
 }

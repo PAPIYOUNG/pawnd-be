@@ -16,6 +16,7 @@ const envSchema = z.object({
   AI_ANALYZE_IMAGE_MODEL_FREE: z.string().min(1),
   AI_IMAGE_EMBEDDING_MODEL: z.string().min(1),
   AI_IMAGE_EMBEDDING_DIMENSION: z.coerce.number().int().positive(),
+  AI_PET_AVATAR_MODEL: z.string().min(1),
 });
 
 export function validate(config: Record<string, any>) {
