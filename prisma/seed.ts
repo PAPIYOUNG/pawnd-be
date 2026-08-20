@@ -4,6 +4,8 @@ import {
   PetType,
   PetGender,
   UserStatus,
+  PostType,
+  PostStatus,
 } from '@/database/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
@@ -190,7 +192,97 @@ async function main() {
     `Seeded ${users.length} users with ${users.flatMap((u) => u.pets).length} pets.`,
   );
 
+  // Seed sample post for testing
+  const aliceUser = await prisma.user.findUnique({
+    where: { email: 'alice.nguyen@example.com' },
+    include: { pets: true },
+  });
+
+  if (aliceUser && aliceUser.pets.length > 0) {
+    const bellaPet = aliceUser.pets.find((p) => p.name === 'Bella');
+    const existingPost = await prisma.petPost.findFirst({
+      where: { userId: aliceUser.id, petName: 'Bella' },
+    });
+
+    if (!existingPost) {
+      const post = await prisma.petPost.create({
+        data: {
+          userId: aliceUser.id,
+          petId: bellaPet?.id ?? null,
+          type: PostType.LOST,
+          status: PostStatus.ACTIVE,
+          petName: 'Bella',
+          petType: PetType.DOG,
+          breed: 'Golden Retriever',
+          gender: PetGender.FEMALE,
+          color: 'Golden',
+          distinctiveFeatures: 'Wearing red collar with bell',
+          description: 'Lost near Chatuchak Park around 5 PM.',
+          eventDate: new Date('2026-08-15T17:00:00.000Z'),
+          latitude: 13.803444,
+          longitude: 100.553444,
+          province: 'Bangkok',
+          district: 'Chatuchak',
+          subdistrict: 'Chatuchak',
+          locationDescription: 'Near MRT Chatuchak Park Exit 1',
+          rewardAmount: 5000,
+          contactPhone: '0812345671',
+          contactLineId: 'alice_pawnd',
+          contactEmail: 'alice.nguyen@example.com',
+        },
+      });
+
+      console.log(`Seeded Sample Lost Post ID: ${post.id}`);
+      await seedSamplePostImage(post.id);
+      await seedSampleFlyers(post.id);
+    } else {
+      console.log(`Sample Lost Post ID: ${existingPost.id}`);
+      await seedSamplePostImage(existingPost.id);
+      await seedSampleFlyers(existingPost.id);
+    }
+  }
+
   await seedCredentialTestUser();
+}
+
+async function seedSamplePostImage(postId: string) {
+  const existingImage = await prisma.postImage.findFirst({
+    where: { postId },
+  });
+
+  if (!existingImage) {
+    await prisma.postImage.create({
+      data: {
+        postId,
+        imageUrl:
+          'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=800&q=80',
+        sortOrder: 0,
+      },
+    });
+    console.log(`Seeded sample PostImage for Post ID: ${postId}`);
+  }
+}
+
+async function seedSampleFlyers(postId: string) {
+  const existingCount = await prisma.flyer.count({
+    where: { postId },
+  });
+
+  if (existingCount < 5) {
+    const toCreate = 5 - existingCount;
+    for (let i = 1; i <= toCreate; i++) {
+      await prisma.flyer.create({
+        data: {
+          postId,
+          fileUrl: `http://localhost:8000/posts/${postId}/flyer/download`,
+          qrUrl: `https://res.cloudinary.com/odgwivn5/image/upload/v1787135607/pawnd/flyer-qr/${postId}.png`,
+          generatedAt: new Date(Date.now() - (toCreate - i + 1) * 3600000),
+        },
+      });
+    }
+    console.log(`Seeded 5 sample Flyers for Post ID: ${postId}`);
+  }
+  console.log(`Total Flyer records for Post ID (${postId}): ${await prisma.flyer.count({ where: { postId } })}`);
 }
 
 async function seedCredentialTestUser() {
