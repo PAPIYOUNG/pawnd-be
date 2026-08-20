@@ -335,6 +335,82 @@ async function seedUsersAndPets() {
       await seedSamplePostImage(existingPost.id);
       await seedSampleFlyers(existingPost.id);
     }
+
+    // Seed Sample Found Post
+    const existingFoundPost = await prisma.petPost.findFirst({
+      where: { userId: aliceUser.id, petName: 'Lucky' },
+    });
+    if (!existingFoundPost) {
+      const foundPost = await prisma.petPost.create({
+        data: {
+          userId: aliceUser.id,
+          type: PostType.FOUND,
+          status: PostStatus.ACTIVE,
+          petName: 'Lucky',
+          petType: PetType.DOG,
+          breed: 'Corgi',
+          gender: PetGender.MALE,
+          color: 'Brown & White',
+          distinctiveFeatures: 'Short legs, heart-shaped pattern on back',
+          description: 'Found wandering near BTS Ari Exit 3',
+          eventDate: new Date('2026-08-18T10:00:00.000Z'),
+          latitude: 13.7797,
+          longitude: 100.5447,
+          province: 'Bangkok',
+          district: 'Phaya Thai',
+          subdistrict: 'Sam Sen Nai',
+          locationDescription: 'Near La Villa Ari',
+          contactPhone: '0812345671',
+        },
+      });
+      await prisma.postImage.create({
+        data: {
+          postId: foundPost.id,
+          imageUrl:
+            'https://images.unsplash.com/photo-1612536057832-2ff7ead58194?auto=format&fit=crop&w=800&q=80',
+          sortOrder: 0,
+        },
+      });
+      console.log(`Seeded Sample Found Post ID: ${foundPost.id}`);
+    }
+
+    // Seed Sample Reunited Post
+    const existingReunitedPost = await prisma.petPost.findFirst({
+      where: { userId: aliceUser.id, petName: 'Milo' },
+    });
+    if (!existingReunitedPost) {
+      const reunitedPost = await prisma.petPost.create({
+        data: {
+          userId: aliceUser.id,
+          type: PostType.LOST,
+          status: PostStatus.REUNITED,
+          petName: 'Milo',
+          petType: PetType.CAT,
+          breed: 'Scottish Fold',
+          gender: PetGender.MALE,
+          color: 'Gray Tabby',
+          distinctiveFeatures: 'Folded ears, very friendly',
+          description: 'Found and safely reunited with owner!',
+          eventDate: new Date('2026-08-10T12:00:00.000Z'),
+          reunitedAt: new Date('2026-08-19T14:30:00.000Z'),
+          latitude: 18.7883,
+          longitude: 98.9853,
+          province: 'Chiang Mai',
+          district: 'Mueang Chiang Mai',
+          subdistrict: 'Si Phum',
+          locationDescription: 'Near Tha Phae Gate',
+        },
+      });
+      await prisma.postImage.create({
+        data: {
+          postId: reunitedPost.id,
+          imageUrl:
+            'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=800&q=80',
+          sortOrder: 0,
+        },
+      });
+      console.log(`Seeded Sample Reunited Post ID: ${reunitedPost.id}`);
+    }
   }
 
   await seedCredentialTestUser();

@@ -20,6 +20,7 @@ import { UsersModule } from './users/users.module';
 
 import { PostEventsModule } from './post-events/post-events.module';
 import { FlyerModule } from './flyer/flyer.module';
+import { HomeModule } from './home/home.module';
 
 import { AiModule } from './ai/ai.module';
 
@@ -38,6 +39,7 @@ import { AiModule } from './ai/ai.module';
     UsersModule,
     PostEventsModule,
     FlyerModule,
+    HomeModule,
     DatabaseModule,
     AiModule,
   ],
