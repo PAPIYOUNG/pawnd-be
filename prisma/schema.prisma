@@ -160,7 +160,7 @@ model User {
   pets                    Pet[]
   petPosts                PetPost[]
   postEvents              PostEvent[]
-  conversationMembers     ConversationMember[]
+  createdChatRooms        ChatRoom[]           @relation("ChatRoomCreator")
   chatRoomMembers         ChatRoomMember[]
   chatMessages            ChatMessage[]
   notifications           Notification[]
@@ -356,7 +356,6 @@ model PetPost {
   foundMatches          AiMatch[]           @relation("FoundPostMatches")
   events                PostEvent[]
   flyers                Flyer[]
-  conversations         Conversation[]
   chatRooms             ChatRoom[]
   notifications         Notification[]
   relatedCommunityPosts CommunityPost[]
@@ -532,93 +531,80 @@ model Flyer {
   @@map("flyers")
 }
 
-model Conversation {
-  id            String               @id @default(uuid()) @db.Uuid
-  relatedPostId String?              @map("related_post_id") @db.Uuid
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
-  relatedPost   PetPost?             @relation(fields: [relatedPostId], references: [id])
-  members       ConversationMember[]
+model ChatRoom {
+  id            String           @id @default(uuid()) @db.Uuid
+  postId        String           @map("post_id") @db.Uuid
+  createdById   String?          @map("created_by_id") @db.Uuid
+  lastMessageAt DateTime?        @map("last_message_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  post          PetPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  creator       User?            @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members       ChatRoomMember[]
+  messages      ChatMessage[]
   notifications Notification[]
 
-  @@index([relatedPostId])
-  @@map("conversations")
-}
-
-model ConversationMember {
-  id             String       @id @default(uuid()) @db.Uuid
-  conversationId String       @map("conversation_id") @db.Uuid
-  userId         String       @map("user_id") @db.Uuid
-  joinedAt       DateTime     @default(now()) @map("joined_at")
-  leftAt         DateTime?    @map("left_at")
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
-
-  @@unique([conversationId, userId])
-  @@index([userId])
-  @@map("conversation_members")
-}
-
-model ChatRoom {
-  id        String           @id @default(uuid()) @db.Uuid
-  postId    String           @map("post_id") @db.Uuid
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
-  post      PetPost          @relation(fields: [postId], references: [id])
-  members   ChatRoomMember[]
-  messages  ChatMessage[]
-
+  @@unique([postId, createdById])
+  @@index([postId])
+  @@index([createdById])
+  @@index([lastMessageAt])
   @@map("chat_rooms")
 }
 
 model ChatRoomMember {
-  id       String   @id @default(uuid()) @db.Uuid
-  roomId   String   @map("room_id") @db.Uuid
-  userId   String   @map("user_id") @db.Uuid
-  joinedAt DateTime @default(now()) @map("joined_at")
-  room     ChatRoom @relation(fields: [roomId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  id         String    @id @default(uuid()) @db.Uuid
+  roomId     String    @map("room_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  leftAt     DateTime? @map("left_at")
+  lastReadAt DateTime? @map("last_read_at")
+  room       ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
+  @@index([userId])
   @@map("chat_room_members")
 }
 
 model ChatMessage {
-  id        String    @id @default(uuid()) @db.Uuid
-  roomId    String    @map("room_id") @db.Uuid
-  senderId  String    @map("sender_id") @db.Uuid
-  content   String
-  imageUrl  String    @map("image_url")
-  isRead    Boolean   @default(false) @map("is_read")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime? @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-  room      ChatRoom  @relation(fields: [roomId], references: [id])
-  sender    User      @relation(fields: [senderId], references: [id])
+  id              String    @id @default(uuid()) @db.Uuid
+  roomId          String    @map("room_id") @db.Uuid
+  senderId        String    @map("sender_id") @db.Uuid
+  clientMessageId String?   @map("client_message_id") @db.VarChar(100)
+  content         String
+  imageUrl        String?   @map("image_url")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  deletedAt       DateTime? @map("deleted_at")
+  room            ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender          User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
+  @@unique([roomId, senderId, clientMessageId])
+  @@index([roomId, createdAt, id])
+  @@index([senderId])
   @@map("chat_messages")
 }
 
 model Notification {
-  id                    String           @id @default(uuid()) @db.Uuid
-  userId                String           @map("user_id") @db.Uuid
-  type                  NotificationType
-  title                 String           @db.VarChar(255)
-  message               String
-  relatedPostId         String?          @map("related_post_id") @db.Uuid
-  relatedMatchId        String?          @map("related_match_id") @db.Uuid
-  relatedConversationId String?          @map("related_conversation_id") @db.Uuid
-  isRead                Boolean          @default(false) @map("is_read")
-  readAt                DateTime?        @map("read_at")
-  createdAt             DateTime         @default(now()) @map("created_at")
-  user                  User             @relation(fields: [userId], references: [id])
-  relatedPost           PetPost?         @relation(fields: [relatedPostId], references: [id])
-  relatedMatch          AiMatch?         @relation(fields: [relatedMatchId], references: [id])
-  relatedConversation   Conversation?    @relation(fields: [relatedConversationId], references: [id])
+  id                String           @id @default(uuid()) @db.Uuid
+  userId            String           @map("user_id") @db.Uuid
+  type              NotificationType
+  title             String           @db.VarChar(255)
+  message           String
+  relatedPostId     String?          @map("related_post_id") @db.Uuid
+  relatedMatchId    String?          @map("related_match_id") @db.Uuid
+  relatedChatRoomId String?          @map("related_chat_room_id") @db.Uuid
+  isRead            Boolean          @default(false) @map("is_read")
+  readAt            DateTime?        @map("read_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  user              User             @relation(fields: [userId], references: [id])
+  relatedPost       PetPost?         @relation(fields: [relatedPostId], references: [id])
+  relatedMatch      AiMatch?         @relation(fields: [relatedMatchId], references: [id])
+  relatedChatRoom   ChatRoom?        @relation(fields: [relatedChatRoomId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, isRead])
   @@index([createdAt])
+  @@index([relatedChatRoomId])
   @@map("notifications")
 }
 
