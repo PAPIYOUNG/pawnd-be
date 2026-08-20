@@ -1,8 +1,13 @@
 import { IS_PUBLIC_KEY } from '@/common/decorators/public.decorator';
 import { PetType, PostType } from '@/database/generated/prisma/enums';
 import { MapPostQueryDto } from './dto/map-post-query.dto';
+import { NearbyPostQueryDto } from './dto/nearby-post-query.dto';
 import { MapController } from './map.controller';
-import { MapPostFeatureCollection, MapService } from './map.service';
+import {
+  MapPostFeatureCollection,
+  MapService,
+  NearbyMapPostFeatureCollection,
+} from './map.service';
 
 jest.mock('@/database/prisma.service', () => ({
   PrismaService: class PrismaService {},
@@ -10,7 +15,8 @@ jest.mock('@/database/prisma.service', () => ({
 
 describe('MapController', () => {
   const getMapPosts = jest.fn();
-  const mapService = { getMapPosts };
+  const getNearbyPosts = jest.fn();
+  const mapService = { getMapPosts, getNearbyPosts };
   let controller: MapController;
 
   const query: MapPostQueryDto = {
@@ -44,6 +50,24 @@ describe('MapController', () => {
       },
     ],
   };
+  const nearbyQuery: NearbyPostQueryDto = {
+    latitude: 13.756,
+    longitude: 100.502,
+    radiusKm: 10,
+    limit: 20,
+  };
+  const nearbyFeatureCollection: NearbyMapPostFeatureCollection = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        ...featureCollection.features[0],
+        properties: {
+          ...featureCollection.features[0].properties,
+          distanceKm: 2.34,
+        },
+      },
+    ],
+  };
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -73,5 +97,32 @@ describe('MapController', () => {
     ) as TypedPropertyDescriptor<MapController['getMapPosts']>;
 
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, descriptor.value!)).toBe(true);
+  });
+
+  describe('getNearbyPosts', () => {
+    it('delegates the query to MapService', async () => {
+      getNearbyPosts.mockResolvedValue(nearbyFeatureCollection);
+
+      await controller.getNearbyPosts(nearbyQuery);
+
+      expect(getNearbyPosts).toHaveBeenCalledWith(nearbyQuery);
+    });
+
+    it('returns the result from MapService', async () => {
+      getNearbyPosts.mockResolvedValue(nearbyFeatureCollection);
+
+      await expect(controller.getNearbyPosts(nearbyQuery)).resolves.toBe(
+        nearbyFeatureCollection,
+      );
+    });
+
+    it('marks the endpoint as public', () => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        MapController.prototype,
+        'getNearbyPosts',
+      ) as TypedPropertyDescriptor<MapController['getNearbyPosts']>;
+
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, descriptor.value!)).toBe(true);
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
 } from '@/database/generated/prisma/enums';
 import type { PrismaService } from '@/database/prisma.service';
 import { MapPostQueryDto } from './dto/map-post-query.dto';
+import { NearbyPostQueryDto } from './dto/nearby-post-query.dto';
 import { MapService } from './map.service';
 
 jest.mock('@/database/prisma.service', () => ({
@@ -57,12 +58,55 @@ describe('MapPostQueryDto', () => {
   });
 });
 
+describe('NearbyPostQueryDto', () => {
+  const validQuery = {
+    latitude: '13.756',
+    longitude: '100.502',
+  };
+
+  it('transforms coordinates and applies nearby defaults', async () => {
+    const dto = plainToInstance(NearbyPostQueryDto, validQuery);
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto).toMatchObject({
+      latitude: 13.756,
+      longitude: 100.502,
+      radiusKm: 10,
+      limit: 20,
+    });
+  });
+
+  it.each([
+    ['latitude below range', { latitude: '-91' }],
+    ['latitude above range', { latitude: '91' }],
+    ['longitude below range', { longitude: '-181' }],
+    ['longitude above range', { longitude: '181' }],
+    ['radius below range', { radiusKm: '0.09' }],
+    ['radius above range', { radiusKm: '50.1' }],
+    ['limit below range', { limit: '0' }],
+    ['limit above range', { limit: '101' }],
+    ['non-integer limit', { limit: '1.5' }],
+    ['post type', { type: 'UNKNOWN' }],
+    ['pet type', { petType: 'HORSE' }],
+  ])('rejects an invalid %s', async (_caseName, invalidValue) => {
+    const dto = plainToInstance(NearbyPostQueryDto, {
+      ...validQuery,
+      ...invalidValue,
+    });
+
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+});
+
 describe('MapService', () => {
   const findMany = jest.fn();
+  const queryRaw = jest.fn<(query: Prisma.Sql) => Promise<unknown[]>>();
+  let capturedRawQuery: Prisma.Sql | undefined;
   const prisma = {
     petPost: {
       findMany,
     },
+    $queryRaw: queryRaw,
   };
   let service: MapService;
 
@@ -72,6 +116,12 @@ describe('MapService', () => {
     north: 14,
     east: 101,
     limit: 100,
+  };
+  const nearbyQuery: NearbyPostQueryDto = {
+    latitude: 13.756,
+    longitude: 100.502,
+    radiusKm: 10,
+    limit: 20,
   };
 
   const post = {
@@ -88,11 +138,177 @@ describe('MapService', () => {
     createdAt: new Date('2026-08-18T11:00:00.000Z'),
     images: [{ imageUrl: 'https://example.com/lucky.jpg' }],
   };
+  const nearbyPost = {
+    id: post.id,
+    type: post.type,
+    petName: post.petName,
+    petType: post.petType,
+    breed: post.breed,
+    latitude: new Prisma.Decimal('13.75649'),
+    longitude: new Prisma.Decimal('100.50151'),
+    province: post.province,
+    district: post.district,
+    eventDate: '2026-08-18T10:00:00.000Z',
+    createdAt: new Date('2026-08-18T11:00:00.000Z'),
+    thumbnailUrl: 'https://example.com/lucky.jpg',
+    distanceKm: new Prisma.Decimal('2.345'),
+  };
+
+  function getRawQuery(): Prisma.Sql {
+    if (!capturedRawQuery) {
+      throw new Error('Expected a raw query to be captured');
+    }
+
+    return capturedRawQuery;
+  }
+
+  function getNormalizedSql(): string {
+    return getRawQuery().text.replace(/\s+/g, ' ').trim();
+  }
 
   beforeEach(() => {
     jest.resetAllMocks();
+    capturedRawQuery = undefined;
     findMany.mockResolvedValue([]);
+    queryRaw.mockImplementation((query) => {
+      capturedRawQuery = query;
+      return Promise.resolve([]);
+    });
     service = new MapService(prisma as unknown as PrismaService);
+  });
+
+  describe('getNearbyPosts', () => {
+    it('uses parameterized $queryRaw with a Prisma SQL object', async () => {
+      await service.getNearbyPosts(nearbyQuery);
+
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+      expect(getRawQuery()).toBeInstanceOf(Prisma.Sql);
+    });
+
+    it('filters ACTIVE posts with a bounding box and final radius check', async () => {
+      await service.getNearbyPosts(nearbyQuery);
+
+      const sql = getNormalizedSql();
+      expect(sql).toMatch(/p\.status = \$\d+::"post_status"/);
+      expect(sql).not.toContain('p.latitude::double precision BETWEEN');
+      expect(sql).not.toContain('p.longitude::double precision BETWEEN');
+      expect(sql).toMatch(
+        /p\.latitude BETWEEN \$\d+::numeric AND \$\d+::numeric/,
+      );
+      expect(sql).toMatch(
+        /p\.longitude BETWEEN \$\d+::numeric AND \$\d+::numeric/,
+      );
+      expect(sql).toMatch(/WHERE "distanceKm" <= \$\d+::double precision/);
+      expect(getRawQuery().values).toContain(PostStatus.ACTIVE);
+    });
+
+    it('parameterizes latitude, longitude, radius, and limit', async () => {
+      await service.getNearbyPosts(nearbyQuery);
+
+      const rawQuery = getRawQuery();
+      expect(rawQuery.values).toEqual(
+        expect.arrayContaining([13.756, 100.502, 10, 20]),
+      );
+      expect(rawQuery.text).not.toContain('13.756');
+      expect(rawQuery.text).not.toContain('100.502');
+    });
+
+    it('adds parameterized enum filters when supplied', async () => {
+      await service.getNearbyPosts({
+        ...nearbyQuery,
+        type: PostType.FOUND,
+        petType: PetType.CAT,
+      });
+
+      const sql = getNormalizedSql();
+      expect(sql).toMatch(/p\.type = \$\d+::"post_type"/);
+      expect(sql).toMatch(/p\.pet_type = \$\d+::"pet_type"/);
+      expect(getRawQuery().values).toEqual(
+        expect.arrayContaining([PostType.FOUND, PetType.CAT]),
+      );
+    });
+
+    it('uses clamped longitude bounds near the date line', async () => {
+      await service.getNearbyPosts({
+        ...nearbyQuery,
+        latitude: 0,
+        longitude: 179.99,
+        radiusKm: 50,
+      });
+
+      expect(getRawQuery().values).toContain(180);
+    });
+
+    it('uses the full longitude range when delta reaches 180 near a pole', async () => {
+      await service.getNearbyPosts({
+        ...nearbyQuery,
+        latitude: 90,
+        longitude: 45,
+        radiusKm: 50,
+      });
+
+      expect(getRawQuery().values).toEqual(expect.arrayContaining([-180, 180]));
+    });
+
+    it('protects acos and orders by distance, created date, and id before limiting', async () => {
+      await service.getNearbyPosts(nearbyQuery);
+
+      const sql = getNormalizedSql();
+      expect(sql).toContain('LEAST( 1.0, GREATEST( -1.0,');
+      expect(sql).toContain(
+        'ORDER BY "distanceKm" ASC, "createdAt" DESC, id ASC',
+      );
+      expect(sql).toMatch(/LIMIT \$\d+$/);
+    });
+
+    it('maps raw rows to GeoJSON with rounded coordinates and distance', async () => {
+      queryRaw.mockResolvedValue([nearbyPost]);
+
+      const result = await service.getNearbyPosts(nearbyQuery);
+
+      expect(result).toEqual({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [100.502, 13.756],
+            },
+            properties: {
+              id: nearbyPost.id,
+              postType: PostType.LOST,
+              petName: 'Lucky',
+              petType: PetType.DOG,
+              breed: 'Golden Retriever',
+              province: 'Bangkok',
+              district: 'Pathum Wan',
+              eventDate: '2026-08-18T10:00:00.000Z',
+              createdAt: '2026-08-18T11:00:00.000Z',
+              thumbnailUrl: 'https://example.com/lucky.jpg',
+              distanceKm: 2.35,
+            },
+          },
+        ],
+      });
+    });
+
+    it('returns a null thumbnail when the raw row has no image', async () => {
+      queryRaw.mockResolvedValue([{ ...nearbyPost, thumbnailUrl: null }]);
+
+      const result = await service.getNearbyPosts(nearbyQuery);
+
+      expect(result.features[0].properties.thumbnailUrl).toBeNull();
+    });
+
+    it('propagates database errors', async () => {
+      const databaseError = new Error('database unavailable');
+      queryRaw.mockRejectedValue(databaseError);
+
+      await expect(service.getNearbyPosts(nearbyQuery)).rejects.toBe(
+        databaseError,
+      );
+    });
   });
 
   it('queries ACTIVE posts within all four bounds', async () => {
