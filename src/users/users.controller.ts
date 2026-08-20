@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -18,6 +19,7 @@ import { ChangePasswordDto } from '@/users/dto/change-password.dto';
 import { UpdateSettingsDto } from '@/users/dto/update-settings.dto';
 import { ChangeEmailDto } from '@/users/dto/change-email.dto';
 import { VerifyEmailChangeDto } from '@/users/dto/verify-email-change.dto';
+import { DeleteAccountDto } from '@/users/dto/delete-account.dto';
 
 const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -99,5 +101,13 @@ export class UsersController {
     @Body() dto: VerifyEmailChangeDto,
   ) {
     return this.usersService.verifyEmailChange(userId, dto);
+  }
+
+  @Delete('me')
+  async deleteAccount(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    return this.usersService.deleteAccount(userId, dto);
   }
 }

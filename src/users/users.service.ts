@@ -11,6 +11,7 @@ import { ChangeEmailDto } from '@/users/dto/change-email.dto';
 import { VerifyEmailChangeDto } from '@/users/dto/verify-email-change.dto';
 import { ConflictException, BadRequestException } from '@nestjs/common';
 import { generateOtp, hashToken } from '@/common/utils/token.util';
+import { DeleteAccountDto } from '@/users/dto/delete-account.dto';
 
 const EMAIL_CHANGE_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
@@ -210,5 +211,45 @@ export class UsersService {
     ]);
 
     return { message: 'Email updated successfully' };
+  }
+
+  async deleteAccount(userId: string, dto: DeleteAccountDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const passwordMatches = await this.bcryptService.compare(
+      dto.password,
+      user.passwordHash,
+    );
+
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Password is incorrect');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          firstName: 'Deleted',
+          lastName: 'User',
+          email: `deleted-${userId}@pawnd.invalid`,
+          passwordHash: null,
+          phone: null,
+          lineId: null,
+          avatarUrl: null,
+          address: null,
+          status: 'DELETED',
+        },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Account deleted successfully' };
   }
 }

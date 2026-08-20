@@ -25,6 +25,7 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BLACKLISTED
+  DELETED
 
   @@map("user_status")
 }
