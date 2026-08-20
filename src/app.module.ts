@@ -15,6 +15,7 @@ import { PetQrModule } from './pet-qr/pet-qr.module';
 
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
+import { UsersModule } from './users/users.module';
 
 import { PostEventsModule } from './post-events/post-events.module';
 
@@ -31,6 +32,7 @@ import { AiModule } from './ai/ai.module';
     JwtModule,
     PetModule,
     PetQrModule,
+    UsersModule,
     PostEventsModule,
     DatabaseModule,
     AiModule,
