@@ -3,6 +3,7 @@ import { IsEnum, IsOptional } from 'class-validator';
 export enum FlyerTemplate {
   STANDARD = 'STANDARD',
   REWARD_EMPHASIS = 'REWARD_EMPHASIS',
+  WANTED = 'WANTED',
 }
 
 export class GenerateFlyerDto {

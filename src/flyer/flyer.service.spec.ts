@@ -106,6 +106,9 @@ describe('FlyerService', () => {
       mockCloudinaryService.uploadFlyerQrCode.mockResolvedValue(
         'https://cloudinary.com/qr.png',
       );
+      mockCloudinaryService.uploadFlyerPdf.mockResolvedValue(
+        'https://cloudinary.com/flyer.pdf',
+      );
       mockPrismaService.flyer.create.mockResolvedValue(mockFlyerRecord);
 
       const result = await service.generateFlyer(userId, postId, {
@@ -121,6 +124,7 @@ describe('FlyerService', () => {
         },
       });
       expect(mockCloudinaryService.uploadFlyerQrCode).toHaveBeenCalledTimes(1);
+      expect(mockCloudinaryService.uploadFlyerPdf).toHaveBeenCalledTimes(1);
       expect(mockPrismaService.flyer.create).toHaveBeenCalledWith({
         data: {
           postId,

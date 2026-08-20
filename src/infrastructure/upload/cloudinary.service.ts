@@ -54,10 +54,9 @@ export class CloudinaryService {
 
   uploadFlyerPdf(pdfBuffer: Buffer, postId: string): Promise<string> {
     return this.uploadBuffer(pdfBuffer, {
-      resource_type: 'image',
+      resource_type: 'raw',
       folder: 'pawnd/flyers',
-      public_id: `${postId}-${Date.now()}`,
-      format: 'pdf',
+      public_id: `${postId}-${Date.now()}.pdf`,
       overwrite: true,
       invalidate: true,
     });

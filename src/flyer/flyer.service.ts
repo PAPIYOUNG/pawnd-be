@@ -112,8 +112,10 @@ export class FlyerService {
         petImageBuffer,
         qrImageBuffer: qrBuffer,
       },
-      dto.template || FlyerTemplate.STANDARD,
+      dto.template || FlyerTemplate.WANTED,
     );
+
+    await this.cloudinaryService.uploadFlyerPdf(pdfBuffer, postId);
 
     const port = this.configService.get<number>('PORT', 8000);
     const backendUrl = `http://localhost:${port}`;
