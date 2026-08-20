@@ -27,10 +27,11 @@ AI ต้องดำเนินการตามลำดับต่อไ�
 1. อ่าน `AGENTS.md` ทั้งหมด
 2. อ่าน ticket, Acceptance Criteria และ requirement ที่เกี่ยวข้อง
 3. ตรวจ `git status` และ branch ปัจจุบัน
-4. ตรวจโครงสร้างไฟล์และค้นหา implementation เดิมก่อนสร้างไฟล์ใหม่
-5. อ่าน Prisma schema, DTO, enum, guard, interceptor และ shared utility ที่เกี่ยวข้อง
-6. สรุปขอบเขตงานและไฟล์ที่คาดว่าจะได้รับผลกระทบแบบสั้น ๆ
-7. หาก requirement ไม่ชัดหรือขัดกัน ให้ถามก่อนลงมือ ห้ามเดา business rule
+4. ตรวจโครงสร้างไฟล์และค้นหา implementation เดิมใน `src/infrastructure/`, `src/common/` และโมดูลของเพื่อนร่วมทีม เพื่อนำ service, adapter, helper, decorator มาใช้งานร่วมกัน ห้ามสร้างซ้ำหรือละเลยสิ่งที่มีอยู่
+5. หากฟีเจอร์เกี่ยวข้องกับ Asset (รูปภาพ/วิดีโอ) หรือ Entity ที่มี Asset ต้องวางแผน Asset Cleanup Strategy (เช่น เรียก `deleteAsset` ของ Cloudinary) ร่วมกับ Database Transaction ให้ครบถ้วน ห้ามปล่อยให้เกิดไฟล์ขยะ (Orphaned Assets) บน Cloud Storage
+6. อ่าน Prisma schema, DTO, enum, guard, interceptor และ shared utility ที่เกี่ยวข้อง
+7. สรุปขอบเขตงาน, ไฟล์ที่คาดว่าจะได้รับผลกระทบ และ Shared Services/Cleanups ที่จะนำมาใช้แบบสั้น ๆ
+8. หาก requirement ไม่ชัดหรือขัดกัน ให้ถามก่อนลงมือ ห้ามเดา business rule
 
 ### 2.2 Source of truth
 
@@ -94,7 +95,8 @@ PAWND คือแพลตฟอร์มช่วยตามหาสัต�
 - Main database: PostgreSQL
 - ORM: Prisma
 - Vector search: pgvector
-- Document data: MongoDB สำหรับ chat และ AI analysis ตาม architecture ที่ทีมอนุมัติ
+- Chat data: PostgreSQL ตาม architecture ล่าสุดที่ทีมอนุมัติ
+- Document data: MongoDB สำหรับ AI analysis ตาม architecture ที่ทีมอนุมัติ
 - Realtime: WebSocket ตาม adapter/library ที่มีอยู่ใน repository
 - Asset storage: ใช้ provider/service กลางของโปรเจกต์ ห้ามเรียก SDK กระจายตาม feature
 
@@ -135,15 +137,15 @@ docker exec -it pawnd-postgres psql -U postgres -d pawnd_project \
 1. คัดลอก `.env.example` → `.env`
 2. ใส่ค่าตามตารางด้านล่าง
 
-| ตัวแปร | คำอธิบาย | ตัวอย่าง / หมายเหตุ |
-|---|---|---|
-| `PORT` | พอร์ตที่ server listen | `8000` |
-| `DATABASE_URL` | Connection string (**ต้อง URL-encode สัญลักษณ์พิเศษในรหัสผ่าน** เช่น `@` → `%40`) | `postgresql://postgres:pass%40word@localhost:5433/pawnd_project?schema=public` |
-| `JWT_SECRET` | Secret key สำหรับ sign JWT — **ต้องยาวอย่างน้อย 32 ตัวอักษร** | ใช้ `openssl rand -hex 32` สร้างได้ |
-| `JWT_EXPIRE_IN` | อายุ token **หน่วยวินาที** | `86400` = 1 วัน |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | สมัคร free tier หรือใส่ dummy สำหรับ dev ที่ยังไม่ต้อง upload |
-| `CLOUDINARY_API_KEY` | Cloudinary API key | เช่นเดียวกัน |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret | เช่นเดียวกัน |
+| ตัวแปร                  | คำอธิบาย                                                                          | ตัวอย่าง / หมายเหตุ                                                            |
+| ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `PORT`                  | พอร์ตที่ server listen                                                            | `8000`                                                                         |
+| `DATABASE_URL`          | Connection string (**ต้อง URL-encode สัญลักษณ์พิเศษในรหัสผ่าน** เช่น `@` → `%40`) | `postgresql://postgres:pass%40word@localhost:5433/pawnd_project?schema=public` |
+| `JWT_SECRET`            | Secret key สำหรับ sign JWT — **ต้องยาวอย่างน้อย 32 ตัวอักษร**                     | ใช้ `openssl rand -hex 32` สร้างได้                                            |
+| `JWT_EXPIRE_IN`         | อายุ token **หน่วยวินาที**                                                        | `86400` = 1 วัน                                                                |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name                                                             | สมัคร free tier หรือใส่ dummy สำหรับ dev ที่ยังไม่ต้อง upload                  |
+| `CLOUDINARY_API_KEY`    | Cloudinary API key                                                                | เช่นเดียวกัน                                                                   |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret                                                             | เช่นเดียวกัน                                                                   |
 
 > ⚠️ **ห้าม commit ไฟล์ `.env`** — มีอยู่ใน `.gitignore` แล้ว หากเพิ่มตัวแปรใหม่ ให้อัปเดต `.env.example` เท่านั้น
 
@@ -152,9 +154,11 @@ docker exec -it pawnd-postgres psql -U postgres -d pawnd_project \
 ```bash
 pnpm install
 pnpm run prisma:generate
-pnpm run prisma:migrate       # พิมพ์ y เมื่อถาม แล้วตั้งชื่อ migration ว่า init
+pnpm prisma db push            # อนุญาตเฉพาะ local prototype
 pnpm run start:dev             # server เริ่มที่ http://localhost:<PORT>
 ```
+
+> **Database workflow ปัจจุบัน:** ทีมอนุญาต `prisma db push` เฉพาะฐานข้อมูล local prototype ที่ลบและสร้างใหม่ได้เท่านั้น การเปลี่ยน schema สำหรับ shared development, staging และ production ต้องสร้าง migration ที่ review และ commit ได้ แล้วใช้ `prisma migrate deploy` ใน environment ปลายทาง ห้ามนำ `db push` ไปใช้แทน migration ใน environment เหล่านั้น
 
 ---
 
@@ -260,8 +264,8 @@ prisma/
 - ใช้ unique constraint/index รองรับ business invariant และ query ที่ใช้บ่อย
 - Decimal, date/time และ vector ต้องแปลงอย่างตั้งใจ ห้ามพึ่ง implicit conversion
 - เก็บเวลาเป็น UTC; แปลง timezone ที่ presentation layer/client
-- การแก้ schema ต้องมาพร้อม migration ที่ตรวจสอบได้ ห้ามแก้ migration เก่าที่ถูกใช้งานร่วมกันแล้ว
-- ห้ามใช้ `prisma db push` แทน migration ใน shared/staging/production workflow เว้นแต่ทีมระบุไว้สำหรับ local prototype
+- การแก้ schema ที่จะส่งต่อไปยัง shared development, staging หรือ production ต้องมาพร้อม migration ที่ตรวจสอบได้ ห้ามแก้ migration เก่าที่ถูกใช้งานร่วมกันแล้ว
+- ใช้ `prisma db push` ได้เฉพาะ local prototype ตามข้อตกลงปัจจุบันของทีม ห้ามใช้แทน migration ใน shared development, staging หรือ production
 - pgvector extension ต้องถูกติดตั้งใน environment ก่อนใช้งาน ห้ามสร้าง fallback ที่เปลี่ยน semantics โดยเงียบ
 - Field ที่ใช้ `Unsupported("vector")` ใน Prisma schema ไม่สามารถ query ผ่าน Prisma Client API ปกติได้ ต้องใช้ `$queryRaw` / `$executeRaw` สำหรับ vector operations เช่น similarity search
 - Migration ที่สร้างตารางซึ่งใช้ type `vector` ต้องมี `CREATE EXTENSION IF NOT EXISTS vector;` อยู่ด้วยเพื่อให้ shadow database ของ Prisma migrate ทำงานได้
@@ -272,15 +276,18 @@ prisma/
 - Video ทุก feature ต้องมีขนาดไม่เกิน **5 MB**
 - ห้ามเชื่อ filename หรือ MIME จาก client เพียงอย่างเดียวหากระบบมีวิธีตรวจเพิ่ม
 - เก็บเฉพาะ asset metadata/URL ที่จำเป็นใน database
-- การลบ entity ที่มี asset ต้องกำหนด cleanup strategy และไม่ลบ asset ของ resource อื่น
-- เรียก upload/delete ผ่าน asset service กลาง เช่น Cloudinary adapter ที่มีอยู่
+- **การลบ entity ที่มี asset หรือการลบรูปภาพเดี่ยว**: ต้องกำหนด cleanup strategy ดึง URL/publicId แล้วเรียก asset service กลาง (`deleteAsset`) เพื่อลบไฟล์จริงออกจาก Storage ทุกครั้ง ห้ามลบเฉพาะ record ใน database
+- เรียก upload/delete ผ่าน asset service กลาง เช่น Cloudinary adapter ที่มีอยู่ ห้ามเรียก SDK ภายนอกตรงๆ ข้าม feature
 
 ### 5.6 Security และ privacy
 
 - ทุก protected endpoint ต้องผ่าน access-token guard
 - ตรวจ role และ ownership แยกกันอย่างชัดเจน
 - ไม่เปิดเผย email, phone, LINE ID หรือ address ต่อสาธารณะโดยอัตโนมัติ
-- การติดต่อเจ้าของ Lost/Found Post ใช้ **In-app Chat เท่านั้น**
+- การติดต่อเจ้าของ Lost/Found Post รองรับ In-app Chat และข้อมูลติดต่อที่เจ้าของเลือกเปิดเผยในประกาศนั้น
+- `contact_phone`, `contact_line_id` และ `contact_email` เป็นข้อมูล optional ระดับประกาศ ห้ามดึงค่าจาก User Profile มาเปิดเผยอัตโนมัติ
+- Public response ต้องคืนเฉพาะข้อมูลติดต่อที่เจ้าของกรอกในประกาศโดยตั้งใจ และต้องไม่คืนข้อมูลติดต่อของ post สถานะ `HIDDEN` หรือ `DELETED`
+- เมื่อ post เป็น `REUNITED` หรือ `CLOSED` ให้ซ่อนข้อมูลติดต่อจาก public response เพื่อป้องกันการติดต่อหลังจบเคส เว้นแต่ requirement ล่าสุดของทีมระบุเป็นอย่างอื่น
 - ป้องกัน enumeration เช่น login/OTP response ไม่ควรบอกข้อมูลบัญชีเกินจำเป็น
 - OTP และ token ต้องมี expiry, จำกัด attempt/rate และใช้ครั้งเดียวตามที่ออกแบบ
 - Public QR token ต้องเป็น random opaque token ห้ามใช้ pet ID หรือข้อมูลที่เดาได้ตรง ๆ
@@ -291,6 +298,7 @@ prisma/
 ## 6. API conventions
 
 - ใช้ REST resource naming และ plural noun ให้สอดคล้องกับ endpoint เดิม
+- ปัจจุบันระบบยังไม่ใช้ global prefix `/api/v1`; endpoint ใหม่ให้ใช้ route เช่น `/posts/:id/events` และห้ามเพิ่ม global prefix โดยไม่ได้รับอนุมัติจากทีม
 - HTTP status โดยทั่วไป:
   - `200 OK` สำหรับอ่านหรือแก้ไขสำเร็จ
   - `201 Created` สำหรับสร้าง resource
@@ -368,16 +376,25 @@ prisma/
 - ตรวจ ownership ของ pet เมื่อ Lost Post อ้างถึง pet profile
 - Owner แก้ไขประกาศ เปลี่ยนสถานะ และดูรายการ My Posts ได้
 - การเปลี่ยนสถานะต้องเป็นไปตาม state transition ที่ระบบกำหนด ห้ามข้าม state โดยเดาเอง
+- เมื่อ Owner ยืนยันว่าสัตว์กลับถึงเจ้าของแล้ว ให้เปลี่ยน `PetPost.status` เป็น `REUNITED`, กำหนด `reunited_at` และสร้าง Timeline event `REUNITED` ภายใน transaction เดียวกัน
+- Post สถานะ `REUNITED` ต้องไม่ปรากฏในรายการค้นหา `ACTIVE` แต่หน้า Pet Post Detail และ Timeline ยังเปิดดูได้ พร้อมแสดงสถานะ “กลับบ้านแล้ว”
+- หน้าแรกสามารถนับและแสดง post สถานะ `REUNITED` เป็น Success Story โดยใช้ `PetPost.status` เป็น source of truth ไม่ใช่นับจาก Timeline
 - เมื่อสร้าง Lost/Found Post สำเร็จ ระบบสร้าง Community Post อัตโนมัติในนาม user ตาม template โดยต้องป้องกันการสร้างซ้ำ
 - การปิด/แก้ post ต้องพิจารณาผลต่อ matching, map, notification และ community reference
-- ผู้ชมติดต่อเจ้าของผ่าน In-app Chat เท่านั้น
+- ผู้ชมติดต่อเจ้าของผ่าน In-app Chat หรือข้อมูลติดต่อ optional ที่เจ้าของกรอกไว้ในประกาศนั้นได้ ห้ามนำข้อมูลจาก User Profile มาเปิดเผยอัตโนมัติ
 
 ### 7.6 Post Event Timeline
 
-- Event คือเบาะแสหรือความคืบหน้าของประกาศ
-- ผู้เพิ่ม event ต้องมีสิทธิ์ตาม policy ของ post
-- Event ต้องเรียงตามเวลาที่เกิด/เวลาสร้างตาม API contract อย่างชัดเจน
-- ห้ามแก้ historical event โดยไม่เก็บ audit หาก policy ต้องการประวัติ
+- Timeline เป็นประวัติความคืบหน้าของประกาศที่ระบบสร้างจาก domain action จริง ผู้ใช้ไม่มี endpoint สำหรับเพิ่ม แก้ หรือลบ historical event โดยตรง
+- Event MVP ที่ทีมอนุมัติคือ `POST_CREATED`, `AI_MATCHES_FOUND`, `AI_MATCH_CONFIRMED`, `REUNITED` และ `POST_CLOSED`
+- เมื่อสร้าง post สำเร็จ ให้ Posts service สร้าง `POST_CREATED` ใน transaction เดียวกับ post
+- เมื่อ AI พบผลลัพธ์มากกว่า 0 เป็นครั้งแรก ให้ AI Matching service สร้าง `AI_MATCHES_FOUND` เพียงครั้งเดียว โดย MVP ไม่เก็บหรือแสดงจำนวน match
+- เมื่อ Owner ยืนยัน AI match ให้ตรวจ ownership และ idempotency ก่อนสร้าง `AI_MATCH_CONFIRMED` เพื่อไม่ให้เกิด event ซ้ำจากการกดหรือ retry ซ้ำ
+- เมื่อเปลี่ยน post เป็น `REUNITED` หรือ `CLOSED` ให้แก้สถานะ post และสร้าง event ที่สอดคล้องกันใน transaction เดียว
+- Public API ของ Timeline คือ `GET /posts/:postId/events`; ไม่มี public `POST /posts/:id/events` การบันทึก event ต้องเรียก internal service จาก Posts หรือ AI Matching use case
+- `GET /posts/:postId/events` เปิดอ่านได้สำหรับ post ที่เปิดเผย รวมถึง `ACTIVE`, `REUNITED` และ `CLOSED`; สำหรับ `HIDDEN` หรือ `DELETED` ให้ใช้ visibility policy ล่าสุดของทีมและไม่เปิดเผย resource ต่อผู้ไม่มีสิทธิ์
+- Event ต้องเรียงตาม `created_at` จากเก่าไปใหม่ และใช้ `id` เป็น deterministic tie-break เมื่อเวลาเท่ากัน
+- Historical event ห้ามแก้หรือลบผ่าน public API; หากอนาคตต้องแก้ข้อมูลย้อนหลัง ต้องออกแบบ audit policy และได้รับอนุมัติจากทีมก่อน
 
 ### 7.7 Map และ Geolocation
 
@@ -455,6 +472,8 @@ Matching flow:
 ### 7.11 Realtime Chat
 
 - การติดต่อผู้โพสต์ทำผ่าน In-app Chat
+- ข้อมูล conversation, member และ message ที่เป็น source of truth ให้ persist ใน PostgreSQL
+- ก่อน implement Chat ทีมต้องเลือก Prisma model ชุดเดียวระหว่าง `Conversation` และ `ChatRoom` และแก้ relation ให้ข้อความ สมาชิก และ notification อ้างถึง aggregate เดียวกัน ห้ามพัฒนาสองระบบคู่ขนาน
 - ตรวจว่า member มีสิทธิ์เข้าถึง conversation ทุกครั้ง ทั้ง REST และ WebSocket
 - ห้าม client ระบุ sender ID แล้วเชื่อทันที ให้ใช้ identity จาก authenticated connection
 - Message ต้อง persist ก่อนหรือร่วมกับการ broadcast ตาม consistency model ที่ทีมกำหนด
@@ -688,4 +707,3 @@ Commit:
 - หาก rule ใหม่มีผลกับ feature เดิม ให้ระบุ migration/compatibility impact
 - ห้าม AI เปลี่ยนข้อห้าม Git, security rule หรือ business rule สำคัญเอง
 - เอกสารนี้ไม่แทน Swagger, Prisma schema, ticket หรือ test แต่ทำหน้าที่เชื่อมทุกส่วนให้ทีมทำงานในแนวทางเดียวกัน
-

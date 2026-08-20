@@ -17,6 +17,8 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor';
 import { UsersModule } from './users/users.module';
 
+import { PostEventsModule } from './post-events/post-events.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -29,6 +31,7 @@ import { UsersModule } from './users/users.module';
     PetModule,
     PetQrModule,
     UsersModule,
+    PostEventsModule,
   ],
   controllers: [],
   providers: [
