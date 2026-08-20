@@ -41,6 +41,16 @@ export class CloudinaryService {
     });
   }
 
+  uploadAvatar(file: Express.Multer.File, userId: string): Promise<string> {
+    return this.uploadBuffer(file.buffer, {
+      resource_type: 'image',
+      folder: 'pawnd/avatars',
+      public_id: userId,
+      overwrite: true,
+      invalidate: true,
+    });
+  }
+
   uploadPetQrCode(qrBuffer: Buffer, petId: string): Promise<string> {
     return this.uploadBuffer(qrBuffer, {
       resource_type: 'image',
