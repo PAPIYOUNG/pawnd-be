@@ -14,6 +14,21 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   LINE_CHANNEL_ID: z.string().min(1),
   LINE_CHANNEL_SECRET: z.string().min(1),
+  NOMINATIM_BASE_URL: z.url().default('https://nominatim.openstreetmap.org'),
+  NOMINATIM_USER_AGENT: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => /PAWND/i.test(value), {
+      message: 'NOMINATIM_USER_AGENT must identify PAWND',
+    })
+    .default('PAWND/1.0'),
+  NOMINATIM_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(10000)
+    .default(5000),
 });
 
 export function validate(config: Record<string, any>) {
