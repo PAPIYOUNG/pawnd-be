@@ -366,6 +366,23 @@ describe('ChatService', () => {
       expect(result).toEqual({ message });
     });
 
+    it('marks a newly persisted message for realtime broadcast', async () => {
+      const message = makeMessage();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockResolvedValue(message);
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Hello',
+          clientMessageId: 'client-1',
+        }),
+      ).resolves.toEqual({ message, wasCreated: true });
+    });
+
     it('returns the existing message after a duplicate clientMessageId', async () => {
       const message = makeMessage();
       prisma.chatRoom.findUnique.mockResolvedValue({
@@ -392,6 +409,23 @@ describe('ChatService', () => {
         }),
       );
       expect(result).toEqual({ message });
+    });
+
+    it('exposes duplicate status to shared realtime persistence callers', async () => {
+      const message = makeMessage();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+      prisma.chatMessage.findUnique.mockResolvedValue(message);
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Retried message',
+          clientMessageId: 'client-1',
+        }),
+      ).resolves.toEqual({ message, wasCreated: false });
     });
   });
 

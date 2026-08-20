@@ -210,7 +210,7 @@ export class ChatService {
     roomId: string,
     query: ChatMessageQueryDto,
   ) {
-    await this.requireActiveMember(roomId, userId);
+    await this.assertActiveMember(userId, roomId);
 
     if (query.cursor) {
       const cursorMessage = await this.prisma.chatMessage.findUnique({
@@ -250,7 +250,17 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, roomId: string, dto: SendChatMessageDto) {
-    await this.requireActiveMember(roomId, userId);
+    const result = await this.persistMessage(userId, roomId, dto);
+
+    return { message: result.message };
+  }
+
+  async persistMessage(
+    userId: string,
+    roomId: string,
+    dto: SendChatMessageDto,
+  ) {
+    await this.assertActiveMember(userId, roomId);
 
     try {
       const message = await this.prisma.$transaction(async (transaction) => {
@@ -272,7 +282,7 @@ export class ChatService {
         return createdMessage;
       });
 
-      return { message };
+      return { message, wasCreated: true };
     } catch (error: unknown) {
       if (dto.clientMessageId && this.isUniqueConstraintError(error)) {
         const existingMessage = await this.prisma.chatMessage.findUnique({
@@ -287,7 +297,7 @@ export class ChatService {
         });
 
         if (existingMessage) {
-          return { message: existingMessage };
+          return { message: existingMessage, wasCreated: false };
         }
       }
 
@@ -296,7 +306,7 @@ export class ChatService {
   }
 
   async markAsRead(userId: string, roomId: string) {
-    await this.requireActiveMember(roomId, userId);
+    await this.assertActiveMember(userId, roomId);
 
     const readState = await this.prisma.chatRoomMember.update({
       where: { roomId_userId: { roomId, userId } },
@@ -312,14 +322,11 @@ export class ChatService {
   }
 
   async deleteRoom(userId: string, roomId: string): Promise<void> {
-    await this.requireActiveMember(roomId, userId);
+    await this.assertActiveMember(userId, roomId);
     await this.prisma.chatRoom.delete({ where: { id: roomId } });
   }
 
-  private async requireActiveMember(
-    roomId: string,
-    userId: string,
-  ): Promise<void> {
+  async assertActiveMember(userId: string, roomId: string): Promise<void> {
     const room = await this.prisma.chatRoom.findUnique({
       where: { id: roomId },
       select: {
