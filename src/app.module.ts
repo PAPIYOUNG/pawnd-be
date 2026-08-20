@@ -19,6 +19,7 @@ import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor
 import { UsersModule } from './users/users.module';
 
 import { PostEventsModule } from './post-events/post-events.module';
+import { FlyerModule } from './flyer/flyer.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PostEventsModule } from './post-events/post-events.module';
     PetQrModule,
     UsersModule,
     PostEventsModule,
+    FlyerModule,
   ],
   controllers: [],
   providers: [

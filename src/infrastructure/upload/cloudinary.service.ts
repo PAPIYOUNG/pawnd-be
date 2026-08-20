@@ -41,6 +41,16 @@ export class CloudinaryService {
     });
   }
 
+  uploadAvatar(file: Express.Multer.File, userId: string): Promise<string> {
+    return this.uploadBuffer(file.buffer, {
+      resource_type: 'image',
+      folder: 'pawnd/avatars',
+      public_id: userId,
+      overwrite: true,
+      invalidate: true,
+    });
+  }
+
   uploadPetQrCode(qrBuffer: Buffer, petId: string): Promise<string> {
     return this.uploadBuffer(qrBuffer, {
       resource_type: 'image',
@@ -52,13 +62,24 @@ export class CloudinaryService {
     });
   }
 
-  uploadAvatar(file: Express.Multer.File, userId: string): Promise<string> {
-    return this.uploadBuffer(file.buffer, {
-      resource_type: 'image',
-      folder: 'pawnd/avatars',
-      public_id: userId,
+  uploadFlyerPdf(pdfBuffer: Buffer, postId: string): Promise<string> {
+    return this.uploadBuffer(pdfBuffer, {
+      resource_type: 'raw',
+      folder: 'pawnd/flyers',
+      public_id: `${postId}-${Date.now()}.pdf`,
       overwrite: true,
       invalidate: true,
+    });
+  }
+
+  uploadFlyerQrCode(qrBuffer: Buffer, postId: string): Promise<string> {
+    return this.uploadBuffer(qrBuffer, {
+      resource_type: 'image',
+      folder: 'pawnd/flyer-qr',
+      public_id: postId,
+      overwrite: true,
+      invalidate: true,
+      format: 'png',
     });
   }
 
