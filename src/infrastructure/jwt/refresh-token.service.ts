@@ -3,23 +3,21 @@ import { PrismaService } from '@/database/prisma.service';
 import { generateToken, hashToken } from '@/common/utils/token.util';
 
 const REFRESH_TOKEN_TTL_DAYS = 7;
-const REFRESH_TOKEN_TTL_DAYS_REMEMBER_ME = 30;
 
 @Injectable()
 export class RefreshTokenService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async issue(userId: string, rememberMe = false): Promise<string> {
+  async issue(userId: string): Promise<string> {
     const token = generateToken();
-    const ttlDays = rememberMe
-      ? REFRESH_TOKEN_TTL_DAYS_REMEMBER_ME
-      : REFRESH_TOKEN_TTL_DAYS;
 
     await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+        ),
       },
     });
 

@@ -1,6 +1,21 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UploadedFiles,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { CreatePetDto } from './dto/create-pet.dto';
+import { UpdatePetDto } from './dto/update-pet.dto';
 import { PetService } from './pet.service';
 
 @Controller('pets')
@@ -14,5 +29,63 @@ export class PetController {
     @Body() createPetDto: CreatePetDto,
   ) {
     return this.petService.createPet(ownerId, createPetDto);
+  }
+
+  @Get()
+  async listMyPets(@CurrentUser('sub') ownerId: string) {
+    return this.petService.listMyPets(ownerId);
+  }
+
+  @Get(':id')
+  async getPetDetail(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.petService.getPetDetail(ownerId, id);
+  }
+
+  @Patch(':id')
+  async updatePet(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updatePetDto: UpdatePetDto,
+  ) {
+    return this.petService.updatePet(ownerId, id, updatePetDto);
+  }
+
+  @Delete(':id')
+  async deletePet(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.petService.deletePet(ownerId, id);
+  }
+
+  @Post(':id/images')
+  @UseInterceptors(FilesInterceptor('images', 3))
+  async uploadPetImages(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.petService.uploadPetImages(ownerId, id, files);
+  }
+
+  @Delete(':id/images/:imageId')
+  async deletePetImage(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    return this.petService.deletePetImage(ownerId, id, imageId);
+  }
+
+  @Patch(':id/images/:imageId/set-profile')
+  async setProfileImage(
+    @CurrentUser('sub') ownerId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    return this.petService.setProfileImage(ownerId, id, imageId);
   }
 }
