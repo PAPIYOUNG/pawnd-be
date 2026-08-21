@@ -1,10 +1,18 @@
 import { Prisma } from '@/database/generated/prisma/client';
-import { PostStatus } from '@/database/generated/prisma/enums';
+import {
+  NotificationType,
+  PostStatus,
+} from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import {
+  NotificationPersistenceResult,
+  NotificationsService,
+} from '@/notifications/notifications.service';
 import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -80,7 +88,12 @@ type UnreadCountRow = {
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ChatService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async createOrGetRoom(userId: string, dto: CreateChatRoomDto) {
     const post = await this.prisma.petPost.findUnique({
@@ -263,7 +276,7 @@ export class ChatService {
     await this.assertActiveMember(userId, roomId);
 
     try {
-      const message = await this.prisma.$transaction(async (transaction) => {
+      const result = await this.prisma.$transaction(async (transaction) => {
         const createdMessage = await transaction.chatMessage.create({
           data: {
             roomId,
@@ -279,10 +292,18 @@ export class ChatService {
           data: { lastMessageAt: createdMessage.createdAt },
         });
 
-        return createdMessage;
+        const notifications = await this.persistNotificationsForRoom(
+          transaction,
+          userId,
+          roomId,
+        );
+
+        return { message: createdMessage, notifications };
       });
 
-      return { message, wasCreated: true };
+      await this.publishNotifications(result.notifications);
+
+      return { message: result.message, wasCreated: true };
     } catch (error: unknown) {
       if (dto.clientMessageId && this.isUniqueConstraintError(error)) {
         const existingMessage = await this.prisma.chatMessage.findUnique({
@@ -297,6 +318,12 @@ export class ChatService {
         });
 
         if (existingMessage) {
+          const notifications = await this.prisma.$transaction((transaction) =>
+            this.persistNotificationsForRoom(transaction, userId, roomId),
+          );
+
+          await this.publishNotifications(notifications);
+
           return { message: existingMessage, wasCreated: false };
         }
       }
@@ -381,6 +408,53 @@ export class ChatService {
       },
       select: { id: true },
     });
+  }
+
+  private async persistNotificationsForRoom(
+    transaction: Prisma.TransactionClient,
+    senderId: string,
+    roomId: string,
+  ): Promise<NotificationPersistenceResult[]> {
+    const recipients = await transaction.chatRoomMember.findMany({
+      where: {
+        roomId,
+        leftAt: null,
+        userId: { not: senderId },
+      },
+      select: { userId: true },
+    });
+
+    return Promise.all(
+      recipients.map(({ userId }) =>
+        this.notificationsService.createInTransaction(transaction, {
+          userId,
+          type: NotificationType.NEW_MESSAGE,
+          title: 'New chat message',
+          message: 'You have a new message',
+          relatedChatRoomId: roomId,
+        }),
+      ),
+    );
+  }
+
+  private async publishNotifications(
+    notifications: NotificationPersistenceResult[],
+  ): Promise<void> {
+    const results = await Promise.allSettled(
+      notifications.map((notification) =>
+        this.notificationsService.publishCreated(notification),
+      ),
+    );
+
+    const failedCount = results.filter(
+      (result) => result.status === 'rejected',
+    ).length;
+
+    if (failedCount > 0) {
+      this.logger.warn(
+        `Failed to publish ${failedCount} chat notification event(s) after commit`,
+      );
+    }
   }
 
   private toRoomResponse(

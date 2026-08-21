@@ -1,11 +1,15 @@
 import { PostStatus } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import { NotificationsService } from '@/notifications/notifications.service';
 import {
   BadRequestException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ChatService } from './chat.service';
 
 describe('ChatService', () => {
@@ -21,6 +25,9 @@ describe('ChatService', () => {
     },
     chatMessage: {
       create: jest.fn(),
+    },
+    chatRoomMember: {
+      findMany: jest.fn(),
     },
   };
   const prisma = {
@@ -41,6 +48,10 @@ describe('ChatService', () => {
     },
     $queryRaw: jest.fn(),
     $transaction: jest.fn(),
+  };
+  const notificationsService = {
+    createInTransaction: jest.fn(),
+    publishCreated: jest.fn(),
   };
 
   const currentUser = {
@@ -95,13 +106,23 @@ describe('ChatService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    transaction.chatRoomMember.findMany.mockResolvedValue([]);
+    notificationsService.createInTransaction.mockResolvedValue({
+      notification: null,
+      wasCreated: false,
+    });
+    notificationsService.publishCreated.mockResolvedValue(undefined);
     prisma.$transaction.mockImplementation(
       (callback: (client: typeof transaction) => unknown) =>
         callback(transaction),
     );
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ChatService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ChatService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: NotificationsService, useValue: notificationsService },
+      ],
     }).compile();
 
     service = module.get(ChatService);
@@ -162,7 +183,7 @@ describe('ChatService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ id: roomId })
         .mockResolvedValueOnce(makeRoom());
-      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2002' });
 
       const result = await service.createOrGetRoom(currentUser.id, { postId });
 
@@ -392,7 +413,7 @@ describe('ChatService', () => {
         id: roomId,
         members: [{ id: 'member-id' }],
       });
-      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2002' });
       prisma.chatMessage.findUnique.mockResolvedValue(message);
 
       const result = await service.sendMessage(currentUser.id, roomId, {
@@ -420,7 +441,7 @@ describe('ChatService', () => {
         id: roomId,
         members: [{ id: 'member-id' }],
       });
-      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2002' });
       prisma.chatMessage.findUnique.mockResolvedValue(message);
 
       await expect(
@@ -429,6 +450,239 @@ describe('ChatService', () => {
           clientMessageId: 'client-1',
         }),
       ).resolves.toEqual({ message, wasCreated: false });
+    });
+
+    it('notifies active room members other than the sender', async () => {
+      const message = makeMessage();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockResolvedValue(message);
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+      transaction.chatRoomMember.findMany.mockResolvedValue([
+        { userId: owner.id },
+      ]);
+      const notificationResult = {
+        notification: { id: 'notification-id', userId: owner.id },
+        wasCreated: true,
+      };
+      notificationsService.createInTransaction.mockResolvedValue(
+        notificationResult,
+      );
+
+      await service.persistMessage(currentUser.id, roomId, {
+        content: 'Hello',
+        clientMessageId: 'client-1',
+      });
+
+      expect(transaction.chatRoomMember.findMany).toHaveBeenCalledWith({
+        where: {
+          roomId,
+          leftAt: null,
+          userId: { not: currentUser.id },
+        },
+        select: { userId: true },
+      });
+      expect(notificationsService.createInTransaction).toHaveBeenCalledWith(
+        transaction,
+        {
+          userId: owner.id,
+          type: 'NEW_MESSAGE',
+          title: 'New chat message',
+          message: 'You have a new message',
+          relatedChatRoomId: roomId,
+        },
+      );
+      expect(notificationsService.publishCreated).toHaveBeenCalledWith(
+        notificationResult,
+      );
+    });
+
+    it('does not notify the sender or members who have left the room', async () => {
+      const message = makeMessage();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockResolvedValue(message);
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+      transaction.chatRoomMember.findMany.mockResolvedValue([]);
+
+      await service.persistMessage(currentUser.id, roomId, {
+        content: 'Hello',
+      });
+
+      expect(transaction.chatRoomMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            roomId,
+            leftAt: null,
+            userId: { not: currentUser.id },
+          },
+        }),
+      );
+      expect(notificationsService.createInTransaction).not.toHaveBeenCalled();
+      expect(notificationsService.publishCreated).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the message transaction when notification persistence fails', async () => {
+      const message = makeMessage();
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockResolvedValue(message);
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+      transaction.chatRoomMember.findMany.mockResolvedValue([
+        { userId: owner.id },
+      ]);
+      notificationsService.createInTransaction.mockRejectedValue(
+        new Error('notification failed'),
+      );
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Hello',
+          clientMessageId: 'client-1',
+        }),
+      ).rejects.toThrow('notification failed');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.chatMessage.create).toHaveBeenCalledTimes(1);
+      expect(transaction.chatRoom.update).toHaveBeenCalledTimes(1);
+      expect(notificationsService.publishCreated).not.toHaveBeenCalled();
+    });
+
+    it('publishes a created notification only after the message transaction commits', async () => {
+      const message = makeMessage();
+      const notificationResult = {
+        notification: { id: 'notification-id', userId: owner.id },
+        wasCreated: true,
+      };
+      const callOrder: string[] = [];
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockImplementation(() => {
+        callOrder.push('message-created');
+        return Promise.resolve(message);
+      });
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+      transaction.chatRoomMember.findMany.mockResolvedValue([
+        { userId: owner.id },
+      ]);
+      notificationsService.createInTransaction.mockImplementation(() => {
+        callOrder.push('notification-persisted');
+        return Promise.resolve(notificationResult);
+      });
+      prisma.$transaction.mockImplementation(async (callback) => {
+        const result = await callback(transaction);
+        callOrder.push('committed');
+        return result as unknown;
+      });
+      notificationsService.publishCreated.mockImplementation(() => {
+        callOrder.push('notification-published');
+        return Promise.resolve();
+      });
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Hello',
+          clientMessageId: 'client-1',
+        }),
+      ).resolves.toEqual({ message, wasCreated: true });
+
+      expect(callOrder).toEqual([
+        'message-created',
+        'notification-persisted',
+        'committed',
+        'notification-published',
+      ]);
+    });
+
+    it('keeps a newly committed message successful when post-commit notification publishing fails', async () => {
+      const message = makeMessage();
+      const notificationResult = {
+        notification: { id: 'notification-id', userId: owner.id },
+        wasCreated: true,
+      };
+      const loggerSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatMessage.create.mockResolvedValue(message);
+      transaction.chatRoom.update.mockResolvedValue({ id: roomId });
+      transaction.chatRoomMember.findMany.mockResolvedValue([
+        { userId: owner.id },
+      ]);
+      notificationsService.createInTransaction.mockResolvedValue(
+        notificationResult,
+      );
+      notificationsService.publishCreated.mockRejectedValue(
+        new Error('socket failed'),
+      );
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Sensitive message content',
+          clientMessageId: 'client-1',
+        }),
+      ).resolves.toEqual({ message, wasCreated: true });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.chatMessage.create).toHaveBeenCalledTimes(1);
+      expect(loggerSpy).toHaveBeenCalledWith(
+        'Failed to publish 1 chat notification event(s) after commit',
+      );
+      expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain(
+        'Sensitive message content',
+      );
+      loggerSpy.mockRestore();
+    });
+
+    it('repairs a missing notification on idempotent retry without creating another message', async () => {
+      const message = makeMessage();
+      const repairedNotification = {
+        notification: { id: 'notification-id', userId: owner.id },
+        wasCreated: true,
+      };
+      prisma.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatRoomMember.findMany.mockResolvedValue([
+        { userId: owner.id },
+      ]);
+
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2002' });
+      prisma.chatMessage.findUnique.mockResolvedValue(message);
+      notificationsService.createInTransaction.mockResolvedValue(
+        repairedNotification,
+      );
+
+      await expect(
+        service.persistMessage(currentUser.id, roomId, {
+          content: 'Hello',
+          clientMessageId: 'client-1',
+        }),
+      ).resolves.toEqual({ message, wasCreated: false });
+
+      expect(transaction.chatMessage.create).not.toHaveBeenCalled();
+      expect(notificationsService.createInTransaction).toHaveBeenCalledWith(
+        transaction,
+        expect.objectContaining({
+          userId: owner.id,
+          relatedChatRoomId: roomId,
+        }),
+      );
+      expect(notificationsService.publishCreated).toHaveBeenCalledWith(
+        repairedNotification,
+      );
     });
   });
 
@@ -478,6 +732,17 @@ describe('ChatService', () => {
       expect(transaction.chatRoom.delete).toHaveBeenCalledWith({
         where: { id: roomId },
       });
+    });
+
+    it('relies on the ChatRoom relation cascade to remove linked notifications', () => {
+      const schema = readFileSync(
+        resolve(process.cwd(), 'prisma/schema.prisma'),
+        'utf8',
+      );
+
+      expect(schema).toMatch(
+        /relatedChatRoom\s+ChatRoom\?\s+@relation\(fields: \[relatedChatRoomId\], references: \[id\], onDelete: Cascade\)/,
+      );
     });
 
     it('does not delete a room for a non-member', async () => {
