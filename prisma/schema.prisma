@@ -25,6 +25,7 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   BLACKLISTED
+  DELETED
 
   @@map("user_status")
 }
@@ -126,6 +127,13 @@ enum ReportType {
   @@map("report_type")
 }
 
+enum ai_feature {
+  ANALYZE_IMAGE
+  GENERATE_DESCRIPTION_IMAGE
+  GENERATE_DESCRIPTION_TEXT
+  SMART_MATCHING
+}
+
 model User {
   id                      String               @id @default(uuid()) @db.Uuid
   firstName               String               @map("first_name") @db.VarChar(100)
@@ -133,6 +141,7 @@ model User {
   email                   String               @unique @db.VarChar(255)
   passwordHash            String?              @map("password_hash") @db.VarChar(255)
   phone                   String?              @db.VarChar(30)
+  address                 String?
   lineId                  String?              @map("line_id") @db.VarChar(100)
   avatarUrl               String?              @map("avatar_url")
   role                    UserRole             @default(USER)
@@ -159,6 +168,7 @@ model User {
   communityComments       CommunityComment[]
   submittedContentReports ContentReport[]      @relation("ContentReportReporter")
   reviewedContentReports  ContentReport[]      @relation("ContentReportReviewer")
+  aiAvatarQuota           AiAvatarQuota?
 
   @@index([email])
   @@index([status])
@@ -311,45 +321,46 @@ model PetQrCode {
 }
 
 model PetPost {
-  id                    String          @id @default(uuid()) @db.Uuid
-  userId                String          @map("user_id") @db.Uuid
-  petId                 String?         @map("pet_id") @db.Uuid
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @map("user_id") @db.Uuid
+  petId                 String?             @map("pet_id") @db.Uuid
   type                  PostType
-  status                PostStatus      @default(ACTIVE)
-  petName               String?         @map("pet_name") @db.VarChar(100)
-  petType               PetType         @map("pet_type")
-  breed                 String?         @db.VarChar(150)
+  status                PostStatus          @default(ACTIVE)
+  petName               String?             @map("pet_name") @db.VarChar(100)
+  petType               PetType             @map("pet_type")
+  breed                 String?             @db.VarChar(150)
   gender                PetGender?
-  color                 String?         @db.VarChar(150)
-  distinctiveFeatures   String?         @map("distinctive_features")
+  color                 String?             @db.VarChar(150)
+  distinctiveFeatures   String?             @map("distinctive_features")
   description           String?
-  eventDate             DateTime        @map("event_date")
-  latitude              Decimal         @db.Decimal(10, 7)
-  longitude             Decimal         @db.Decimal(10, 7)
-  province              String?         @db.VarChar(100)
-  district              String?         @db.VarChar(100)
-  subdistrict           String?         @db.VarChar(100)
-  locationDescription   String?         @map("location_description")
-  rewardAmount          Decimal?        @map("reward_amount") @db.Decimal(12, 2)
-  currentLocation       String?         @map("current_location")
-  contactPhone          String?         @map("contact_phone") @db.VarChar(30)
-  contactLineId         String?         @map("contact_line_id") @db.VarChar(100)
-  contactEmail          String?         @map("contact_email") @db.VarChar(255)
-  viewCount             Int             @default(0) @map("view_count")
-  reunitedAt            DateTime?       @map("reunited_at")
-  createdAt             DateTime        @default(now()) @map("created_at")
-  updatedAt             DateTime        @updatedAt @map("updated_at")
-  user                  User            @relation(fields: [userId], references: [id])
-  pet                   Pet?            @relation(fields: [petId], references: [id])
+  eventDate             DateTime            @map("event_date")
+  latitude              Decimal             @db.Decimal(10, 7)
+  longitude             Decimal             @db.Decimal(10, 7)
+  province              String?             @db.VarChar(100)
+  district              String?             @db.VarChar(100)
+  subdistrict           String?             @db.VarChar(100)
+  locationDescription   String?             @map("location_description")
+  rewardAmount          Decimal?            @map("reward_amount") @db.Decimal(12, 2)
+  currentLocation       String?             @map("current_location")
+  contactPhone          String?             @map("contact_phone") @db.VarChar(30)
+  contactLineId         String?             @map("contact_line_id") @db.VarChar(100)
+  contactEmail          String?             @map("contact_email") @db.VarChar(255)
+  viewCount             Int                 @default(0) @map("view_count")
+  reunitedAt            DateTime?           @map("reunited_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  user                  User                @relation(fields: [userId], references: [id])
+  pet                   Pet?                @relation(fields: [petId], references: [id])
   images                PostImage[]
-  lostMatches           AiMatch[]       @relation("LostPostMatches")
-  foundMatches          AiMatch[]       @relation("FoundPostMatches")
+  lostMatches           AiMatch[]           @relation("LostPostMatches")
+  foundMatches          AiMatch[]           @relation("FoundPostMatches")
   events                PostEvent[]
   flyers                Flyer[]
   conversations         Conversation[]
   chatRooms             ChatRoom[]
   notifications         Notification[]
   relatedCommunityPosts CommunityPost[]
+  aiMatchUserActions    AiMatchUserAction[]
 
   @@index([userId])
   @@index([petId])
@@ -379,43 +390,120 @@ model PostImage {
 }
 
 model ImageEmbedding {
-  id           String                @id @default(uuid()) @db.Uuid
-  postImageId  String                @map("post_image_id") @db.Uuid
-  embedding    Unsupported("vector") //Unsupported เพราะ PostgreSQL รู้จัก vector ผ่าน pgvector แต่ Prisma ยังไม่รองรับชนิด vector โดยตรง
-  modelName    String                @map("model_name") @db.VarChar(100)
-  modelVersion String?               @map("model_version") @db.VarChar(50)
+  id           String                     @id @default(uuid()) @db.Uuid
+  postImageId  String                     @map("post_image_id") @db.Uuid
+  embedding    Unsupported("vector(768)")
+  modelName    String                     @map("model_name") @db.VarChar(100)
+  modelVersion String?                    @map("model_version") @db.VarChar(50)
   dimension    Int
-  createdAt    DateTime              @default(now()) @map("created_at")
-  postImage    PostImage             @relation(fields: [postImageId], references: [id])
+  createdAt    DateTime                   @default(now()) @map("created_at")
 
+  postImage PostImage @relation(fields: [postImageId], references: [id], onDelete: Cascade)
+
+  @@unique([postImageId, modelName])
   @@index([postImageId])
   @@map("image_embeddings")
 }
 
 model AiMatch {
-  id               String         @id @default(uuid()) @db.Uuid
-  lostPostId       String         @map("lost_post_id") @db.Uuid
-  foundPostId      String         @map("found_post_id") @db.Uuid
-  vectorSimilarity Decimal        @map("vector_similarity") @db.Decimal(6, 5)
-  featureScore     Decimal?       @map("feature_score") @db.Decimal(6, 5)
-  locationScore    Decimal?       @map("location_score") @db.Decimal(6, 5)
-  dateScore        Decimal?       @map("date_score") @db.Decimal(6, 5)
-  finalScore       Decimal        @map("final_score") @db.Decimal(6, 5)
-  distanceKm       Decimal?       @map("distance_km") @db.Decimal(10, 2)
-  modelName        String?        @map("model_name") @db.VarChar(100)
-  modelVersion     String?        @map("model_version") @db.VarChar(50)
-  isNotified       Boolean        @default(false) @map("is_notified")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  lostPost         PetPost        @relation("LostPostMatches", fields: [lostPostId], references: [id])
-  foundPost        PetPost        @relation("FoundPostMatches", fields: [foundPostId], references: [id])
-  notifications    Notification[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  lostPostId         String              @map("lost_post_id") @db.Uuid
+  foundPostId        String              @map("found_post_id") @db.Uuid
+  vectorSimilarity   Decimal             @map("vector_similarity") @db.Decimal(6, 5)
+  featureScore       Decimal?            @map("feature_score") @db.Decimal(6, 5)
+  locationScore      Decimal?            @map("location_score") @db.Decimal(6, 5)
+  dateScore          Decimal?            @map("date_score") @db.Decimal(6, 5)
+  finalScore         Decimal             @map("final_score") @db.Decimal(6, 5)
+  distanceKm         Decimal?            @map("distance_km") @db.Decimal(10, 2)
+  modelName          String?             @map("model_name") @db.VarChar(100)
+  modelVersion       String?             @map("model_version") @db.VarChar(50)
+  isNotified         Boolean             @default(false) @map("is_notified")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  lostPost           PetPost             @relation("LostPostMatches", fields: [lostPostId], references: [id])
+  foundPost          PetPost             @relation("FoundPostMatches", fields: [foundPostId], references: [id])
+  notifications      Notification[]
+  aiMatchUserActions AiMatchUserAction[]
 
   @@unique([lostPostId, foundPostId])
   @@index([lostPostId])
   @@index([foundPostId])
   @@index([finalScore])
   @@map("ai_matches")
+}
+
+model AiMatchUserAction {
+  id      String @id @default(uuid()) @db.Uuid
+  matchId String @map("match_id") @db.Uuid
+  postId  String @map("post_id") @db.Uuid
+
+  isPinned    Boolean @default(false) @map("is_pinned")
+  isDismissed Boolean @default(false) @map("is_dismissed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  match AiMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  post  PetPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, postId])
+  @@index([matchId])
+  @@index([postId])
+  @@map("ai_match_user_actions")
+}
+
+model AiAvatarQuota {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  usedCount Int @default(0) @map("used_count")
+  limit     Int @default(2)
+  cycle     Int @default(1)
+
+  resetAt DateTime? @map("reset_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("ai_avatar_quotas")
+}
+
+model ai_generation_logs {
+  id String @id @default(uuid()) @db.Uuid
+
+  feature ai_feature
+
+  requested_model String
+  resolved_model  String
+  provider        String?
+
+  generation_id String?
+
+  input_tokens  Int?
+  output_tokens Int?
+  total_tokens  Int?
+
+  cost_usd Decimal? @db.Decimal(12, 8)
+
+  fallback_used Boolean @default(false)
+
+  finish_reason String?
+  streaming     Boolean @default(false)
+
+  success Boolean @default(true)
+
+  error_code    String?
+  error_message String?
+
+  created_at DateTime @default(now())
+
+  @@index([feature])
+  @@index([requested_model])
+  @@index([resolved_model])
+  @@index([created_at])
 }
 
 model PostEvent {
