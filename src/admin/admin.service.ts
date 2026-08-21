@@ -13,6 +13,7 @@ import { UpdateUserStatusDto } from '@/admin/dto/update-user-status.dto';
 import { GetPetsDto } from '@/admin/dto/get-pets.dto';
 import { GetPostsDto } from '@/admin/dto/get-posts.dto';
 import { UpdatePostStatusDto } from '@/admin/dto/update-post-status.dto';
+import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-post-visibility.dto';
 
 @Injectable()
 export class AdminService {
@@ -436,8 +437,74 @@ export class AdminService {
 
   deletePost() {}
 
-  updateCommunityPostVisibility() {}
-  deleteCommunityPost() {}
+  async updateCommunityPostVisibility(
+    id: string,
+    dto: UpdateCommunityPostVisibilityDto,
+  ) {
+    const existingPost = await this.prisma.communityPost.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existingPost) {
+      throw new NotFoundException('Community post not found');
+    }
+
+    const post = await this.prisma.communityPost.update({
+      where: { id },
+      data: { isHidden: dto.isHidden },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        isHidden: true,
+        userId: true,
+        updatedAt: true,
+      },
+    });
+
+    this.adminGateway.broadcastCommunityPostUpdated(post);
+
+    return { post };
+  }
+
+  async deleteCommunityPost(id: string) {
+    const existingPost = await this.prisma.communityPost.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existingPost) {
+      throw new NotFoundException('Community post not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const comments = await tx.communityComment.findMany({
+        where: { communityPostId: id },
+        select: { id: true },
+      });
+      const commentIds = comments.map((comment) => comment.id);
+
+      await tx.contentReport.deleteMany({
+        where: {
+          OR: [
+            { communityPostId: id },
+            ...(commentIds.length ? [{ commentId: { in: commentIds } }] : []),
+          ],
+        },
+      });
+
+      await tx.communityComment.deleteMany({ where: { communityPostId: id } });
+      await tx.communityPostImage.deleteMany({
+        where: { communityPostId: id },
+      });
+      await tx.communityPost.delete({ where: { id } });
+    });
+
+    this.adminGateway.broadcastCommunityPostDeleted({ id });
+
+    return { message: 'Community post deleted successfully' };
+  }
 
   updateCommentVisibility() {}
   deleteComment() {}

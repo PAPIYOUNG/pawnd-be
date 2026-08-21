@@ -62,4 +62,12 @@ export class AdminGateway
   broadcastDashboardStats(payload: unknown): void {
     this.server.to('admins').emit('dashboard_stats_updated', payload);
   }
+
+  broadcastCommunityPostUpdated(payload: unknown): void {
+    this.server.to('admins').emit('community_post_updated', payload);
+  }
+
+  broadcastCommunityPostDeleted(payload: unknown): void {
+    this.server.to('admins').emit('community_post_deleted', payload);
+  }
 }

@@ -16,6 +16,7 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { GetPetsDto } from './dto/get-pets.dto';
 import { GetPostsDto } from './dto/get-posts.dto';
 import { UpdatePostStatusDto } from './dto/update-post-status.dto';
+import { UpdateCommunityPostVisibilityDto } from './dto/update-community-post-visibility.dto';
 
 @Roles(UserRole.ADMIN)
 @Controller('admin')
@@ -82,11 +83,18 @@ export class AdminController {
 
   // 10
   @Patch('community/posts/:id/hide')
-  updateCommunityPostVisibility() {}
+  updateCommunityPostVisibility(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCommunityPostVisibilityDto,
+  ) {
+    return this.adminService.updateCommunityPostVisibility(id, dto);
+  }
 
   // 11
   @Delete('community/posts/:id')
-  deleteCommunityPost() {}
+  deleteCommunityPost(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.deleteCommunityPost(id);
+  }
 
   // 12
   @Patch('community/comments/:id/hide')
