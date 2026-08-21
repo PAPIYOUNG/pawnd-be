@@ -23,6 +23,7 @@ import { FlyerModule } from './flyer/flyer.module';
 import { HomeModule } from './home/home.module';
 
 import { AiModule } from './ai/ai.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AiModule } from './ai/ai.module';
     HomeModule,
     DatabaseModule,
     AiModule,
+    NotificationsModule,
   ],
   controllers: [],
   providers: [
