@@ -15,6 +15,9 @@ describe('ChatService', () => {
     chatRoom: {
       create: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
     },
     chatMessage: {
       create: jest.fn(),
@@ -453,16 +456,64 @@ describe('ChatService', () => {
 
   describe('deleteRoom', () => {
     it('hard deletes a room for either active member', async () => {
-      prisma.chatRoom.findUnique.mockResolvedValue({
+      transaction.chatRoom.findUnique.mockResolvedValue({
         id: roomId,
         members: [{ id: 'member-id' }],
       });
-      prisma.chatRoom.delete.mockResolvedValue({ id: roomId });
+      transaction.chatRoom.delete.mockResolvedValue({ id: roomId });
 
       await service.deleteRoom(currentUser.id, roomId);
 
-      expect(prisma.chatRoom.delete).toHaveBeenCalledWith({
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(transaction.chatRoom.findUnique).toHaveBeenCalledWith({
         where: { id: roomId },
+        select: {
+          id: true,
+          members: {
+            where: { userId: currentUser.id, leftAt: null },
+            select: { id: true },
+          },
+        },
+      });
+      expect(transaction.chatRoom.delete).toHaveBeenCalledWith({
+        where: { id: roomId },
+      });
+    });
+
+    it('does not delete a room for a non-member', async () => {
+      transaction.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [],
+      });
+
+      await expect(service.deleteRoom(currentUser.id, roomId)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(transaction.chatRoom.delete).not.toHaveBeenCalled();
+    });
+
+    it('returns not found when the room disappears before deletion', async () => {
+      transaction.chatRoom.findUnique.mockResolvedValue({
+        id: roomId,
+        members: [{ id: 'member-id' }],
+      });
+      transaction.chatRoom.delete.mockRejectedValue({ code: 'P2025' });
+
+      await expect(service.deleteRoom(currentUser.id, roomId)).rejects.toThrow(
+        new NotFoundException('Chat room not found'),
+      );
+    });
+  });
+
+  describe('deleteRoomsForUser', () => {
+    it('deletes every room found through membership so room cascades remove all participant data', async () => {
+      transaction.chatRoom.deleteMany.mockResolvedValue({ count: 2 });
+
+      await expect(
+        service.deleteRoomsForUser(transaction, currentUser.id),
+      ).resolves.toEqual({ count: 2 });
+      expect(transaction.chatRoom.deleteMany).toHaveBeenCalledWith({
+        where: { members: { some: { userId: currentUser.id } } },
       });
     });
   });

@@ -322,12 +322,39 @@ export class ChatService {
   }
 
   async deleteRoom(userId: string, roomId: string): Promise<void> {
-    await this.assertActiveMember(userId, roomId);
-    await this.prisma.chatRoom.delete({ where: { id: roomId } });
+    try {
+      await this.prisma.$transaction(async (transaction) => {
+        await this.assertActiveMemberWithClient(transaction, userId, roomId);
+        await transaction.chatRoom.delete({ where: { id: roomId } });
+      });
+    } catch (error: unknown) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new NotFoundException('Chat room not found');
+      }
+
+      throw error;
+    }
+  }
+
+  deleteRoomsForUser(
+    transaction: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<Prisma.BatchPayload> {
+    return transaction.chatRoom.deleteMany({
+      where: { members: { some: { userId } } },
+    });
   }
 
   async assertActiveMember(userId: string, roomId: string): Promise<void> {
-    const room = await this.prisma.chatRoom.findUnique({
+    return this.assertActiveMemberWithClient(this.prisma, userId, roomId);
+  }
+
+  private async assertActiveMemberWithClient(
+    client: Pick<Prisma.TransactionClient, 'chatRoom'>,
+    userId: string,
+    roomId: string,
+  ): Promise<void> {
+    const room = await client.chatRoom.findUnique({
       where: { id: roomId },
       select: {
         id: true,
@@ -391,6 +418,19 @@ export class ChatService {
       error !== null &&
       'code' in error &&
       error.code === 'P2002'
+    );
+  }
+
+  private isRecordNotFoundError(error: unknown): boolean {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return error.code === 'P2025';
+    }
+
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2025'
     );
   }
 }
