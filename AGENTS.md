@@ -95,7 +95,7 @@ PAWND คือแพลตฟอร์มช่วยตามหาสัต�
 - Main database: PostgreSQL
 - ORM: Prisma
 - Vector search: pgvector
-- Chat data: PostgreSQL ตาม architecture ล่าสุดที่ทีมอนุมัติ
+- Chat data: PostgreSQL เป็น source of truth และเข้าถึงผ่าน Prisma ตาม architecture ล่าสุดที่ทีมอนุมัติ
 - Document data: MongoDB สำหรับ AI analysis ตาม architecture ที่ทีมอนุมัติ
 - Realtime: WebSocket ตาม adapter/library ที่มีอยู่ใน repository
 - Asset storage: ใช้ provider/service กลางของโปรเจกต์ ห้ามเรียก SDK กระจายตาม feature
@@ -154,11 +154,11 @@ docker exec -it pawnd-postgres psql -U postgres -d pawnd_project \
 ```bash
 pnpm install
 pnpm run prisma:generate
-pnpm prisma db push            # อนุญาตเฉพาะ local prototype
+pnpm prisma migrate dev        # ใช้ Prisma migration สำหรับ local development
 pnpm run start:dev             # server เริ่มที่ http://localhost:<PORT>
 ```
 
-> **Database workflow ปัจจุบัน:** ทีมอนุญาต `prisma db push` เฉพาะฐานข้อมูล local prototype ที่ลบและสร้างใหม่ได้เท่านั้น การเปลี่ยน schema สำหรับ shared development, staging และ production ต้องสร้าง migration ที่ review และ commit ได้ แล้วใช้ `prisma migrate deploy` ใน environment ปลายทาง ห้ามนำ `db push` ไปใช้แทน migration ใน environment เหล่านั้น
+> **Database workflow ปัจจุบัน:** การเปลี่ยน schema ทุก environment รวมถึง local development ต้องใช้ Prisma migrations ที่ review และ commit ได้เท่านั้น ใช้ `prisma migrate dev` สำหรับสร้าง/ใช้ migration ระหว่างพัฒนา และ `prisma migrate deploy` ใน environment ปลายทาง ห้ามใช้ `prisma db push` ทุกกรณี และห้ามแก้ migration เก่าที่ทีมใช้งานร่วมกันแล้ว
 
 ---
 
@@ -264,8 +264,8 @@ prisma/
 - ใช้ unique constraint/index รองรับ business invariant และ query ที่ใช้บ่อย
 - Decimal, date/time และ vector ต้องแปลงอย่างตั้งใจ ห้ามพึ่ง implicit conversion
 - เก็บเวลาเป็น UTC; แปลง timezone ที่ presentation layer/client
-- การแก้ schema ที่จะส่งต่อไปยัง shared development, staging หรือ production ต้องมาพร้อม migration ที่ตรวจสอบได้ ห้ามแก้ migration เก่าที่ถูกใช้งานร่วมกันแล้ว
-- ใช้ `prisma db push` ได้เฉพาะ local prototype ตามข้อตกลงปัจจุบันของทีม ห้ามใช้แทน migration ใน shared development, staging หรือ production
+- การเปลี่ยน schema ต้องใช้ Prisma migrations ที่ตรวจสอบและ review ได้ในทุก environment รวมถึง local development ห้ามแก้ migration เก่าที่ทีมใช้งานร่วมกันแล้ว
+- ห้ามใช้ `prisma db push` ทุกกรณี รวมถึง local development
 - pgvector extension ต้องถูกติดตั้งใน environment ก่อนใช้งาน ห้ามสร้าง fallback ที่เปลี่ยน semantics โดยเงียบ
 - Field ที่ใช้ `Unsupported("vector")` ใน Prisma schema ไม่สามารถ query ผ่าน Prisma Client API ปกติได้ ต้องใช้ `$queryRaw` / `$executeRaw` สำหรับ vector operations เช่น similarity search
 - Migration ที่สร้างตารางซึ่งใช้ type `vector` ต้องมี `CREATE EXTENSION IF NOT EXISTS vector;` อยู่ด้วยเพื่อให้ shadow database ของ Prisma migrate ทำงานได้
@@ -348,7 +348,7 @@ prisma/
 - User อ่านและแก้ไข profile ของตนเองได้เฉพาะ field ที่อนุญาต
 - แยก flow เปลี่ยน password และเปลี่ยน email ออกจาก update profile ทั่วไป
 - Avatar ต้องผ่าน asset validation
-- การลบบัญชีต้องกำหนดผลต่อ post, pet, chat และ audit data ตาม policy ของทีม ห้าม cascade delete โดยเดาเอง
+- การลบบัญชีและผลกระทบต่อ ChatRoom ต้องดำเนินการผ่าน Service transaction ตาม policy ของทีม ห้ามเดาหรือพึ่ง cascade จาก User เอง รวมถึงต้องกำหนดผลต่อ post, pet และ audit data อย่างชัดเจน
 - Public response ต้องไม่คืน contact information เกินจำเป็น
 
 ### 7.3 Pet Profile และ Gallery
@@ -472,14 +472,18 @@ Matching flow:
 ### 7.11 Realtime Chat
 
 - การติดต่อผู้โพสต์ทำผ่าน In-app Chat
-- ข้อมูล conversation, member และ message ที่เป็น source of truth ให้ persist ใน PostgreSQL
-- ก่อน implement Chat ทีมต้องเลือก Prisma model ชุดเดียวระหว่าง `Conversation` และ `ChatRoom` และแก้ relation ให้ข้อความ สมาชิก และ notification อ้างถึง aggregate เดียวกัน ห้ามพัฒนาสองระบบคู่ขนาน
-- ตรวจว่า member มีสิทธิ์เข้าถึง conversation ทุกครั้ง ทั้ง REST และ WebSocket
-- ห้าม client ระบุ sender ID แล้วเชื่อทันที ให้ใช้ identity จาก authenticated connection
-- Message ต้อง persist ก่อนหรือร่วมกับการ broadcast ตาม consistency model ที่ทีมกำหนด
+- ทีมเลือก `ChatRoom`, `ChatRoomMember` และ `ChatMessage` เป็น Prisma model ชุดเดียวสำหรับ Chat; ยกเลิกการใช้ `Conversation` และ `ConversationMember` และห้ามพัฒนาสองระบบคู่ขนาน
+- PostgreSQL และ Prisma เป็น source of truth ของ ChatRoom, member และ message
+- MVP เป็น ChatRoom แบบ 1:1 ระหว่างเจ้าของ `PetPost` กับผู้ติดต่อ โดย Service ต้องสร้าง ChatRoom และ `ChatRoomMember` ของผู้ใช้ทั้งสองคนภายใน transaction เดียวกัน
+- ต้องเก็บสมาชิกผ่าน `ChatRoomMember` แม้ MVP เป็น 1:1 เพื่อรองรับหลายสมาชิกในอนาคต
+- REST และ WebSocket ต้องตรวจทุกครั้งว่า authenticated user เป็นสมาชิกของ ChatRoom ก่อนอ่าน ส่งข้อความ หรือดำเนินการกับ room
+- sender identity ต้องมาจาก authentication เท่านั้น ห้ามเชื่อ sender ID จาก client
+- ต้อง persist `ChatMessage` สำเร็จก่อน WebSocket broadcast
 - ป้องกัน duplicate message ด้วย client message ID/idempotency strategy หาก contract รองรับ
 - ตรวจ content length, attachment และ moderation rule
-- ห้าม expose conversation แก่ผู้ที่ไม่ใช่สมาชิก
+- ห้าม expose ChatRoom แก่ผู้ที่ไม่ใช่สมาชิก
+- เมื่อสมาชิกฝ่ายใดลบ ChatRoom ให้ hard delete room และทำให้ room หายจากสมาชิกทุกฝ่าย
+- การลบ ChatRoom ต้องทำผ่าน Service transaction และลบ `ChatRoomMember`, `ChatMessage` และ notification ที่เกี่ยวข้องทั้งหมด
 
 ### 7.12 Community Feed, Comment และ Report
 

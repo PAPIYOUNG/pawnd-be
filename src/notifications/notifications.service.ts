@@ -1,11 +1,29 @@
 import { NotificationsGateway } from '@/notifications/notifications.gateway';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@/database/prisma.service';
 import { ListNotificationsDto } from '@/notifications/dto/list-notifications.dto';
 import { NotificationType } from '@/database/generated/prisma/enums';
+import type { Notification, Prisma } from '@/database/generated/prisma/client';
+
+export type CreateNotificationParams = {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  relatedPostId?: string;
+  relatedMatchId?: string;
+  relatedChatRoomId?: string;
+};
+
+export type NotificationPersistenceResult = {
+  notification: Notification | null;
+  wasCreated: boolean;
+};
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: NotificationsGateway,
@@ -34,6 +52,7 @@ export class NotificationsService {
           message: true,
           relatedPostId: true,
           relatedMatchId: true,
+          relatedChatRoomId: true,
           isRead: true,
           createdAt: true,
         },
@@ -61,6 +80,7 @@ export class NotificationsService {
         type: true,
         title: true,
         message: true,
+        relatedChatRoomId: true,
         isRead: true,
       },
     });
@@ -118,49 +138,86 @@ export class NotificationsService {
     return { message: 'Notification deleted' };
   }
 
-  async create(params: {
-    userId: string;
-    type: NotificationType;
-    title: string;
-    message: string;
-    relatedPostId?: string;
-    relatedMatchId?: string;
-    relatedConversationId?: string;
-  }) {
-    const user = await this.prisma.user.findUnique({
+  async create(params: CreateNotificationParams) {
+    const result = await this.prisma.$transaction((transaction) =>
+      this.createInTransaction(transaction, params),
+    );
+
+    try {
+      await this.publishCreated(result);
+    } catch {
+      this.logger.warn('Failed to publish notification event after commit');
+    }
+
+    return result.notification;
+  }
+
+  /** Internal persistence primitive. The caller owns the transaction and emit timing. */
+  async createInTransaction(
+    transaction: Prisma.TransactionClient,
+    params: CreateNotificationParams,
+  ): Promise<NotificationPersistenceResult> {
+    const user = await transaction.user.findUnique({
       where: { id: params.userId },
       select: { notificationEnabled: true },
     });
 
     if (!user?.notificationEnabled) {
-      return null;
+      return { notification: null, wasCreated: false };
     }
 
-    const existing = await this.prisma.notification.findFirst({
+    const existing = await transaction.notification.findFirst({
       where: {
         userId: params.userId,
         type: params.type,
         isRead: false,
         ...(params.relatedPostId && { relatedPostId: params.relatedPostId }),
         ...(params.relatedMatchId && { relatedMatchId: params.relatedMatchId }),
+        ...(params.relatedChatRoomId && {
+          relatedChatRoomId: params.relatedChatRoomId,
+        }),
       },
     });
 
     if (existing) {
-      return existing;
+      return { notification: existing, wasCreated: false };
     }
 
-    const notification = await this.prisma.notification.create({
-      data: params,
+    const notification = await transaction.notification.create({
+      data: {
+        userId: params.userId,
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        ...(params.relatedPostId !== undefined && {
+          relatedPostId: params.relatedPostId,
+        }),
+        ...(params.relatedMatchId !== undefined && {
+          relatedMatchId: params.relatedMatchId,
+        }),
+        ...(params.relatedChatRoomId !== undefined && {
+          relatedChatRoomId: params.relatedChatRoomId,
+        }),
+      },
     });
+
+    return { notification, wasCreated: true };
+  }
+
+  /** Internal post-commit publisher. Never call this from a database transaction. */
+  async publishCreated(result: NotificationPersistenceResult): Promise<void> {
+    if (!result.wasCreated || !result.notification) {
+      return;
+    }
 
     const unreadCount = await this.prisma.notification.count({
-      where: { userId: params.userId, isRead: false },
+      where: { userId: result.notification.userId, isRead: false },
     });
 
-    this.gateway.notifyNewNotification(params.userId, notification);
-    this.gateway.notifyCountUpdate(params.userId, unreadCount);
-
-    return notification;
+    this.gateway.notifyNewNotification(
+      result.notification.userId,
+      result.notification,
+    );
+    this.gateway.notifyCountUpdate(result.notification.userId, unreadCount);
   }
 }

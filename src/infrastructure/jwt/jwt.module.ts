@@ -4,9 +4,11 @@ import { JwtModule as NestJwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { EnvVariableType } from '@/config/env.validate';
 import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
 import { RefreshTokenService } from '@/infrastructure/jwt/refresh-token.service';
+import { DatabaseModule } from '@/database/database.module';
 
 @Module({
   imports: [
+    DatabaseModule,
     NestJwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (
