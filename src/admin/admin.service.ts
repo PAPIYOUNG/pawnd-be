@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@/database/prisma.service';
 import type { Prisma } from '@/database/generated/prisma/client';
 import {
@@ -15,6 +19,7 @@ import { GetPostsDto } from '@/admin/dto/get-posts.dto';
 import { UpdatePostStatusDto } from '@/admin/dto/update-post-status.dto';
 import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-post-visibility.dto';
 import { UpdateCommentVisibilityDto } from '@/admin/dto/update-comment-visibility.dto';
+import { ReviewReportDto } from '@/admin/dto/review-report.dto';
 
 @Injectable()
 export class AdminService {
@@ -554,6 +559,125 @@ export class AdminService {
     return { message: 'Comment deleted successfully' };
   }
 
-  getReports() {}
-  reviewReport() {}
+  async getReports() {
+    const reports = await this.prisma.contentReport.findMany({
+      include: {
+        reporter: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+
+        communityPost: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+            images: true,
+          },
+        },
+
+        comment: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+
+        reviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return {
+      totalReports: reports.length,
+      reports,
+    };
+  }
+  async reviewReport(reportId: string, dto: ReviewReportDto, adminId: string) {
+    const report = await this.prisma.contentReport.findUnique({
+      where: {
+        id: reportId,
+      },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    if (report.status !== ReportStatus.PENDING) {
+      throw new BadRequestException('Report has already been reviewed');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (dto.hideContent) {
+        if (report.communityPostId) {
+          await tx.communityPost.update({
+            where: {
+              id: report.communityPostId,
+            },
+            data: {
+              isHidden: true,
+            },
+          });
+        }
+
+        if (report.commentId) {
+          await tx.communityComment.update({
+            where: {
+              id: report.commentId,
+            },
+            data: {
+              isHidden: true,
+            },
+          });
+        }
+      }
+
+      await tx.contentReport.update({
+        where: {
+          id: reportId,
+        },
+
+        data: {
+          status: dto.status,
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+        },
+      });
+    });
+
+    const updatedReport = await this.prisma.contentReport.findUnique({
+      where: {
+        id: reportId,
+      },
+    });
+
+    this.adminGateway.broadcastReportUpdated(updatedReport);
+
+    return {
+      report: updatedReport,
+    };
+  }
 }

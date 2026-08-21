@@ -78,4 +78,8 @@ export class AdminGateway
   broadcastCommentDeleted(payload: unknown): void {
     this.server.to('admins').emit('comment_deleted', payload);
   }
+
+  broadcastReportUpdated(payload: unknown): void {
+    this.server.to('admins').emit('report_updated', payload);
+  }
 }

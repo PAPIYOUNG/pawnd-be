@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Roles } from '@/common/decorators/role.decorator';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { UserRole } from '@/database/generated/prisma/enums';
 import { AdminService } from './admin.service';
 import { GetUsersDto } from './dto/get-users.dto';
@@ -18,6 +19,7 @@ import { GetPostsDto } from './dto/get-posts.dto';
 import { UpdatePostStatusDto } from './dto/update-post-status.dto';
 import { UpdateCommunityPostVisibilityDto } from './dto/update-community-post-visibility.dto';
 import { UpdateCommentVisibilityDto } from './dto/update-comment-visibility.dto';
+import { ReviewReportDto } from './dto/review-report.dto';
 
 @Roles(UserRole.ADMIN)
 @Controller('admin')
@@ -114,9 +116,17 @@ export class AdminController {
 
   // 14
   @Get('reports')
-  getReports() {}
+  getReports() {
+    return this.adminService.getReports();
+  }
 
   // 15
   @Patch('reports/:id')
-  reviewReport() {}
+  reviewReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReviewReportDto,
+    @CurrentUser('sub') adminId: string,
+  ) {
+    return this.adminService.reviewReport(id, dto, adminId);
+  }
 }
