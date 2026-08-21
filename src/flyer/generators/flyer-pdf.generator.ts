@@ -113,6 +113,18 @@ export class FlyerPdfGenerator {
 
     this.drawCornerAccents(doc, borderDark);
 
+    // 2.1 Logo (Top-Left Corner - Extra Large & Transparent)
+    const logoPath = this.getLogoPath();
+    if (logoPath) {
+      try {
+        doc.image(logoPath, 30, 26, {
+          fit: [95, 95],
+        });
+      } catch {
+        // Safe fallback if logo fails
+      }
+    }
+
     // 3. Giant "WANTED" Header (Red Color)
     doc
       .fillColor('#C5221F')
@@ -181,7 +193,7 @@ export class FlyerPdfGenerator {
         .text('มีรางวัลตอบแทนสำหรับผู้พบเห็น', 0, currentY + 3, { align: 'center', width: pageWidth });
     }
 
-    currentY += 50;
+    currentY += 56;
 
     // 8. Details & QR Code (Frameless clean layout with wider line spacing)
     const detailsX = 48;
@@ -192,7 +204,7 @@ export class FlyerPdfGenerator {
     let dY = currentY;
     doc.fillColor('#2A1608').fontSize(16).font(boldFont);
     doc.text('ข้อมูลสัตว์เลี้ยง:', detailsX, dY);
-    dY += 26;
+    dY += 27;
 
     doc.fontSize(13).font(regFont);
 
@@ -202,11 +214,11 @@ export class FlyerPdfGenerator {
 
     const typeLine = `ชนิด / สายพันธุ์: ${petTypeThai} ${data.breed ? `(${data.breed})` : ''}`;
     doc.text(typeLine, detailsX, dY, { width: detailsWidth });
-    dY += 24;
+    dY += 25;
 
     const genderLine = `เพศ: ${genderThai}   |   สี: ${data.color || 'ไม่ระบุ'}`;
     doc.text(genderLine, detailsX, dY, { width: detailsWidth });
-    dY += 24;
+    dY += 25;
 
     const formattedDate = new Date(data.eventDate).toLocaleDateString('th-TH', {
       year: 'numeric',
@@ -214,12 +226,12 @@ export class FlyerPdfGenerator {
       day: 'numeric',
     });
     doc.text(`วันที่${isLost ? 'หาย' : 'พบ'}: ${formattedDate}`, detailsX, dY, { width: detailsWidth });
-    dY += 24;
+    dY += 25;
 
     const locationParts = [data.subdistrict, data.district, data.province].filter(Boolean);
     if (locationParts.length > 0) {
       doc.text(`สถานที่ล่าสุด: ${locationParts.join(', ')}`, detailsX, dY, { width: detailsWidth });
-      dY += 24;
+      dY += 25;
     }
 
     if (data.distinctiveFeatures) {
@@ -247,9 +259,9 @@ export class FlyerPdfGenerator {
       }
     }
 
-    // 10. Large Prominent Contact Line (Frameless & Bold Red)
-    const contactBoxY = currentY + 160;
-    const phone = data.contactPhone ? `โทร: ${data.contactPhone}` : '';
+    // 10. Large Prominent Contact Line (Frameless & Bold Red with ติดต่อ prefix)
+    const contactBoxY = currentY + 168;
+    const phone = data.contactPhone ? `ติดต่อ โทร: ${data.contactPhone}` : '';
     const line = data.contactLineId ? `LINE: ${data.contactLineId}` : '';
     const contactInfo = [phone, line].filter(Boolean).join('     |     ') || 'กรุณาติดต่อเจ้าของผ่านแอป PAWND';
 
@@ -474,5 +486,21 @@ export class FlyerPdfGenerator {
       UNKNOWN: 'ไม่ระบุ',
     };
     return map[gender.toUpperCase()] || gender;
+  }
+
+  private static getLogoPath(): string | null {
+    const candidates = [
+      path.join(process.cwd(), 'src', 'assets', 'images', 'pawnd-logo.png'),
+      path.join(process.cwd(), 'dist', 'assets', 'images', 'pawnd-logo.png'),
+      path.join(__dirname, '..', '..', 'assets', 'images', 'pawnd-logo.png'),
+      path.join(__dirname, '..', 'assets', 'images', 'pawnd-logo.png'),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+    return null;
   }
 }
