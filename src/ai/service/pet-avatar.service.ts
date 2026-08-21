@@ -1,4 +1,5 @@
 import { GeneratePetAvatarDto } from '@/ai/dto/generate-pet-avatar.dto';
+import { createMockPetAvatarDataUrl } from '@/ai/mock-ai.data';
 import { OpenRouterImageResponse } from '@/ai/types/openrouter-image-response.type';
 import { PrismaService } from '@/database/prisma.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
@@ -86,10 +87,12 @@ export class PetAvatarService {
 
     const generatedImage = await this.generateWithOpenRouter(imageUrls);
 
-    const avatarUrl = await this.cloudinaryService.uploadBase64(
-      generatedImage,
-      'pawnd/pet-avatars',
-    );
+    const avatarUrl = this.isMockMode()
+      ? generatedImage
+      : await this.cloudinaryService.uploadBase64(
+          generatedImage,
+          'pawnd/pet-avatars',
+        );
     // =========================================================
     // 6. INCREMENT QUOTA
     // ทำหลัง Generate สำเร็จเท่านั้น
@@ -121,7 +124,9 @@ export class PetAvatarService {
 
       avatar: {
         imageUrl: avatarUrl,
-        model: this.configService.getOrThrow<string>('AI_PET_AVATAR_MODEL'),
+        model:
+          this.configService.get<string>('AI_PET_AVATAR_MODEL') ??
+          'mock/pet-avatar',
         style: '3D_VOXEL',
       },
 
@@ -141,6 +146,10 @@ export class PetAvatarService {
   // =========================================================
 
   private async generateWithOpenRouter(imageUrls: string[]): Promise<string> {
+    if (this.isMockMode()) {
+      return createMockPetAvatarDataUrl();
+    }
+
     const apiKey = this.configService.getOrThrow<string>('OPENROUTER_API_KEY');
 
     const baseUrl =
@@ -293,5 +302,9 @@ The final result should clearly look like the same pet shown across all referenc
         cycle: 1,
       },
     });
+  }
+
+  private isMockMode(): boolean {
+    return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
   }
 }

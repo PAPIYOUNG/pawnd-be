@@ -54,6 +54,7 @@ export function validate(config: Record<string, any>): EnvVariableType {
   if (!parsed.success) {
     const logger = new Logger('ENV Validation');
     logger.error('ENV validation fail', z.prettifyError(parsed.error));
+    console.error('ENV validation fail', z.prettifyError(parsed.error));
     throw new Error('ENV Validation failed');
   }
 

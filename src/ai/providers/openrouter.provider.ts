@@ -4,19 +4,29 @@ import OpenAI from 'openai';
 
 @Injectable()
 export class OpenRouterProvider {
-  private readonly client: OpenAI;
+  private readonly client?: OpenAI;
 
   constructor(private readonly configService: ConfigService) {
-    this.client = new OpenAI({
-      baseURL: this.configService.getOrThrow<string>('OPENROUTER_BASE_URL'),
-      apiKey: this.configService.getOrThrow<string>('OPENROUTER_API_KEY'),
-      defaultHeaders: {
-        'X-OpenRouter-Title': 'PAWND',
-      },
-    });
+    const mockMode = this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
+
+    if (!mockMode) {
+      this.client = new OpenAI({
+        baseURL: this.configService.getOrThrow<string>('OPENROUTER_BASE_URL'),
+        apiKey: this.configService.getOrThrow<string>('OPENROUTER_API_KEY'),
+        defaultHeaders: {
+          'X-OpenRouter-Title': 'PAWND',
+        },
+      });
+    }
   }
 
   getClient() {
+    if (!this.client) {
+      throw new Error(
+        'OpenRouter client is unavailable while AI_MOCK_MODE=true',
+      );
+    }
+
     return this.client;
   }
 }

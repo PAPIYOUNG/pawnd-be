@@ -26,6 +26,8 @@ import { AiModule } from './ai/ai.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
+import { PostModule } from './post/post.module';
+import { CommunityModule } from './community/community.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { ChatModule } from './chat/chat.module';
     NotificationsModule,
     AdminModule,
     ChatModule,
+    PostModule,
+    CommunityModule,
   ],
   controllers: [],
   providers: [

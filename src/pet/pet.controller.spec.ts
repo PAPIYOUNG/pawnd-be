@@ -160,7 +160,11 @@ describe('PetController', () => {
 
       const result = await controller.updatePet(ownerId, petId, dto);
 
-      expect(mockPetService.updatePet).toHaveBeenCalledWith(ownerId, petId, dto);
+      expect(mockPetService.updatePet).toHaveBeenCalledWith(
+        ownerId,
+        petId,
+        dto,
+      );
       expect(result).toEqual(expectedResponse);
     });
   });
@@ -201,7 +205,11 @@ describe('PetController', () => {
 
       mockPetService.uploadPetImages.mockResolvedValue(expectedResponse);
 
-      const result = await controller.uploadPetImages(ownerId, petId, mockFiles);
+      const result = await controller.uploadPetImages(
+        ownerId,
+        petId,
+        mockFiles,
+      );
 
       expect(mockPetService.uploadPetImages).toHaveBeenCalledWith(
         ownerId,

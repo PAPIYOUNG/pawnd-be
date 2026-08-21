@@ -61,9 +61,7 @@ describe('FlyerService', () => {
   });
 
   describe('generateFlyer', () => {
-    it(
-      'should generate printable flyer poster and save record successfully',
-      async () => {
+    it('should generate printable flyer poster and save record successfully', async () => {
       const userId = 'user-uuid-1';
       const postId = 'post-uuid-1';
 

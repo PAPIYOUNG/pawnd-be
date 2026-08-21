@@ -374,14 +374,15 @@ model PetPost {
 }
 
 model PostImage {
-  id        String   @id @default(uuid()) @db.Uuid
-  postId    String   @map("post_id") @db.Uuid
-  imageUrl  String   @map("image_url")
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  post       PetPost          @relation(fields: [postId], references: [id])
-  embeddings ImageEmbedding[]
+  id                     String           @id @default(uuid()) @db.Uuid
+  postId                 String           @map("post_id") @db.Uuid
+  imageUrl               String           @map("image_url")
+  cloudinaryPublicId     String?          @map("cloudinary_public_id")
+  cloudinaryResourceType String?          @default("image") @map("cloudinary_resource_type")
+  sortOrder              Int              @default(0) @map("sort_order")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  post                   PetPost          @relation(fields: [postId], references: [id])
+  embeddings             ImageEmbedding[]
 
   @@index([postId])
   @@map("post_images")
@@ -631,12 +632,14 @@ model CommunityPost {
 }
 
 model CommunityPostImage {
-  id              String        @id @default(uuid()) @db.Uuid
-  communityPostId String        @map("community_post_id") @db.Uuid
-  imageUrl        String        @map("image_url")
-  sortOrder       Int           @default(0) @map("sort_order")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  communityPost   CommunityPost @relation(fields: [communityPostId], references: [id])
+  id                     String        @id @default(uuid()) @db.Uuid
+  communityPostId        String        @map("community_post_id") @db.Uuid
+  imageUrl               String        @map("image_url")
+  cloudinaryPublicId     String?       @map("cloudinary_public_id")
+  cloudinaryResourceType String?       @default("image") @map("cloudinary_resource_type")
+  sortOrder              Int           @default(0) @map("sort_order")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  communityPost          CommunityPost @relation(fields: [communityPostId], references: [id])
 
   @@index([communityPostId])
   @@map("community_post_images")
