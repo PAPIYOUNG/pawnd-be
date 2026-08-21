@@ -8,7 +8,7 @@ import { Prisma } from '@/database/generated/prisma/client';
 import { PostStatus } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
-
+import { CloudinaryResourceType } from '@/infrastructure/upload/type/cloudinary-resource.types';
 import { CreateCommunityPostDto } from './dto/create-community-post.dto';
 import { UpdateCommunityPostDto } from './dto/update-community-post.dto';
 import { CommunityPostQueryDto } from './dto/community-post-query.dto';
@@ -21,6 +21,19 @@ export class CommunityService {
     lastName: true,
     avatarUrl: true,
   };
+
+  private getCloudinaryResourceType(
+    value: string | null | undefined,
+  ): CloudinaryResourceType {
+    switch (value) {
+      case 'image':
+      case 'video':
+      case 'raw':
+        return value;
+      default:
+        return 'image';
+    }
+  }
 
   private readonly postListInclude = {
     user: {
@@ -262,6 +275,20 @@ export class CommunityService {
 
     const startOrder = lastImage ? lastImage.sortOrder + 1 : 0;
 
+    const maxImages = 3;
+
+    const currentCount = await this.prisma.communityPostImage.count({
+      where: {
+        communityPostId: postId,
+      },
+    });
+
+    if (currentCount + files.length > maxImages) {
+      throw new BadRequestException(
+        `A post can have maximum ${maxImages} images`,
+      );
+    }
+
     const imageUrls = await Promise.all(
       files.map((file) => this.cloudinary.upload(file)),
     );
@@ -293,6 +320,13 @@ export class CommunityService {
 
     if (!image) {
       throw new NotFoundException('Community post image not found');
+    }
+
+    if (image.cloudinaryPublicId) {
+      await this.cloudinary.deleteAsset(
+        image.cloudinaryPublicId,
+        this.getCloudinaryResourceType(image.cloudinaryResourceType),
+      );
     }
 
     await this.prisma.communityPostImage.delete({
