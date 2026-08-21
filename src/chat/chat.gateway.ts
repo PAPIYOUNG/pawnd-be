@@ -40,9 +40,6 @@ type SocketAuthenticationError = Error & {
 
 @WebSocketGateway({
   namespace: '/chat',
-  cors: {
-    origin: '*',
-  },
 })
 export class ChatGateway implements OnGatewayInit {
   @WebSocketServer()
