@@ -162,11 +162,6 @@ export class ChatGateway implements OnGatewayInit {
 
     try {
       const payload = await this.accessTokenService.verify(token);
-
-      if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
-        throw new Error('Access token subject is missing');
-      }
-
       socket.data.userId = payload.sub;
     } catch {
       throw new ChatEventError(

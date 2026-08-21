@@ -1,6 +1,10 @@
 import { UserRole } from '@/database/generated/prisma/enums';
 import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
-import { ForbiddenException, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type {
   AuthenticatedChatSocket,
   ChatSocketServer,
@@ -120,6 +124,21 @@ describe('ChatGateway', () => {
       expect(JSON.stringify(error)).not.toContain(token);
       expect(loggerSpy).not.toHaveBeenCalled();
       loggerSpy.mockRestore();
+    });
+
+    it('rejects an inactive account without assigning socket identity', async () => {
+      const socket = createSocket();
+      accessTokenService.verify.mockRejectedValue(
+        new UnauthorizedException('Account is not active'),
+      );
+
+      const error = await authenticate(socket);
+
+      expect(error?.data).toEqual({
+        code: 'UNAUTHORIZED',
+        message: 'Invalid or expired access token',
+      });
+      expect(socket.data.userId).toBeUndefined();
     });
   });
 
