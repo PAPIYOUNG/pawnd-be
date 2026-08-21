@@ -409,7 +409,11 @@ export class PostService {
         id: imageId,
         postId,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        cloudinaryPublicId: true,
+        cloudinaryResourceType: true,
+      },
     });
 
     if (!image) {
@@ -424,6 +428,13 @@ export class PostService {
         where: { id: imageId },
       }),
     ]);
+
+    if (image.cloudinaryPublicId) {
+      await this.cloudinary.deleteAsset(
+        image.cloudinaryPublicId,
+        image.cloudinaryResourceType ?? 'image',
+      );
+    }
 
     return {
       imageId,

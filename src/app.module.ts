@@ -18,6 +18,7 @@ import { TransformInterceptor } from '@/common/intercepter/Transform.interceptor
 
 import { PostEventsModule } from './post-events/post-events.module';
 import { PostModule } from './post/post.module';
+import { CommunityModule } from './community/community.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PostModule } from './post/post.module';
     PetQrModule,
     PostEventsModule,
     PostModule,
+    CommunityModule,
   ],
   controllers: [],
   providers: [
