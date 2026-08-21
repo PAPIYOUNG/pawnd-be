@@ -31,9 +31,6 @@ export interface ReunitedAlertPayload {
 
 @WebSocketGateway({
   namespace: '/home',
-  cors: {
-    origin: '*',
-  },
 })
 export class HomeGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect

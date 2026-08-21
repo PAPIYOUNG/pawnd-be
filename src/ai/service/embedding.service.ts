@@ -1,4 +1,5 @@
 import { OpenRouterEmbeddingResponse } from '@/ai/types/openrouter-embedding.type';
+import { createMockImageEmbedding } from '@/ai/mock-ai.data';
 import { PrismaService } from '@/database/prisma.service';
 import {
   BadRequestException,
@@ -25,9 +26,9 @@ export class EmbeddingService {
       throw new NotFoundException('Post image not found');
     }
 
-    const model = this.configService.getOrThrow<string>(
-      'AI_IMAGE_EMBEDDING_MODEL',
-    );
+    const model =
+      this.configService.get<string>('AI_IMAGE_EMBEDDING_MODEL') ??
+      'mock/image-embedding';
 
     // เช็กก่อนว่าเคยสร้าง embedding ด้วย model แล้วไหม?
     const existingEmbedding = await this.prisma.$queryRaw<
@@ -56,15 +57,18 @@ export class EmbeddingService {
     imageUrl: string,
     model: string,
   ): Promise<number[]> {
+    const dimension =
+      this.configService.get<number>('AI_IMAGE_EMBEDDING_DIMENSION') ?? 768;
+
+    if (this.isMockMode()) {
+      return createMockImageEmbedding(imageUrl, dimension);
+    }
+
     const baseUrl = this.configService.getOrThrow<string>(
       'OPENROUTER_BASE_URL',
     );
 
     const apiKey = this.configService.getOrThrow<string>('OPENROUTER_API_KEY');
-
-    const dimension = this.configService.getOrThrow<number>(
-      'AI_IMAGE_EMBEDDING_DIMENSION',
-    );
 
     const response = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
@@ -122,9 +126,9 @@ export class EmbeddingService {
     sourcePostId: string,
     candidatePostId: string,
   ): Promise<number> {
-    const model = this.configService.getOrThrow<string>(
-      'AI_IMAGE_EMBEDDING_MODEL',
-    );
+    const model =
+      this.configService.get<string>('AI_IMAGE_EMBEDDING_MODEL') ??
+      'mock/image-embedding';
 
     const rows = await this.prisma.$queryRaw<
       Array<{
@@ -198,5 +202,9 @@ export class EmbeddingService {
 
   private clamp(value: number): number {
     return Math.max(0, Math.min(1, value));
+  }
+
+  private isMockMode(): boolean {
+    return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
   }
 }

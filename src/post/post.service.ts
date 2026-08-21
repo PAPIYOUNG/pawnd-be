@@ -432,7 +432,7 @@ export class PostService {
     if (image.cloudinaryPublicId) {
       await this.cloudinary.deleteAsset(
         image.cloudinaryPublicId,
-        image.cloudinaryResourceType ?? 'image',
+        // image.cloudinaryResourceType ?? 'image',
       );
     }
 

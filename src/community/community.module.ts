@@ -9,7 +9,6 @@ import { CommentController } from './comment.controller';
 import { CommentService } from './comment.service';
 import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
-import { CommentService } from './comment/comment.service';
 
 @Module({
   imports: [DatabaseModule, UploadModule],

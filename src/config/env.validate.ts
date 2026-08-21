@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import z from 'zod';
+import { parseCorsAllowedOrigins } from './cors.config';
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().max(65535).positive(),
@@ -10,6 +11,7 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
   FRONTEND_URL: z.string().min(1),
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   LINE_CHANNEL_ID: z.string().min(1),
@@ -38,14 +40,37 @@ const envSchema = z.object({
   AI_PET_AVATAR_MODEL: z.string().min(1),
 });
 
-export function validate(config: Record<string, any>) {
+type ParsedEnvironment = z.infer<typeof envSchema>;
+
+export type EnvVariableType = Omit<
+  ParsedEnvironment,
+  'CORS_ALLOWED_ORIGINS'
+> & {
+  CORS_ALLOWED_ORIGINS: string[];
+};
+
+export function validate(config: Record<string, any>): EnvVariableType {
   const parsed = envSchema.safeParse(config);
   if (!parsed.success) {
     const logger = new Logger('ENV Validation');
     logger.error('ENV validation fail', z.prettifyError(parsed.error));
+    console.error('ENV validation fail', z.prettifyError(parsed.error));
     throw new Error('ENV Validation failed');
   }
-  return parsed.data;
-}
 
-export type EnvVariableType = z.infer<typeof envSchema>;
+  try {
+    return {
+      ...parsed.data,
+      CORS_ALLOWED_ORIGINS: parseCorsAllowedOrigins(
+        parsed.data.CORS_ALLOWED_ORIGINS,
+        parsed.data.FRONTEND_URL,
+      ),
+    };
+  } catch (error: unknown) {
+    const logger = new Logger('ENV Validation');
+    logger.error(
+      error instanceof Error ? error.message : 'CORS configuration is invalid',
+    );
+    throw new Error('ENV Validation failed');
+  }
+}

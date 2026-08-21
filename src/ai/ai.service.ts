@@ -1,4 +1,5 @@
 import { OpenRouterProvider } from '@/ai/providers/openrouter.provider';
+import { MOCK_AI_ANALYSIS_RESULT } from '@/ai/mock-ai.data';
 import { AiLogService } from '@/ai/service/ai-log.service';
 import { AiAnalysisResult } from '@/ai/types/ai-analysis-result.type';
 import { OpenRouterChatCompletion } from '@/ai/types/openrouter.type';
@@ -15,11 +16,15 @@ export class AiService {
   ) {}
 
   async testConnection() {
-    const client = this.openRouterProvider.getClient();
-
     const requestedModel = this.configService.getOrThrow<string>(
       'AI_ANALYZE_IMAGE_MODEL',
     );
+
+    if (this.isMockMode()) {
+      return 'PAWND AI MOCK READY';
+    }
+
+    const client = this.openRouterProvider.getClient();
 
     try {
       const response = (await client.chat.completions.create({
@@ -51,11 +56,15 @@ export class AiService {
     }
   }
   async analyzeImage(imageUrl: string): Promise<AiAnalysisResult> {
-    const client = this.openRouterProvider.getClient();
-
     const requestedModel = this.configService.getOrThrow<string>(
       'AI_ANALYZE_IMAGE_MODEL',
     );
+
+    if (this.isMockMode()) {
+      return { ...MOCK_AI_ANALYSIS_RESULT };
+    }
+
+    const client = this.openRouterProvider.getClient();
 
     try {
       const response = (await client.chat.completions.create({
@@ -184,6 +193,10 @@ Field requirements:
     }
   }
   //ส่วนย่อย ai log
+  private isMockMode(): boolean {
+    return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
+  }
+
   private async createAiSuccessLog(
     feature: ai_feature,
     requestedModel: string,

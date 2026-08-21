@@ -12,6 +12,7 @@ import { VerifyEmailChangeDto } from '@/users/dto/verify-email-change.dto';
 import { ConflictException, BadRequestException } from '@nestjs/common';
 import { generateOtp, hashToken } from '@/common/utils/token.util';
 import { DeleteAccountDto } from '@/users/dto/delete-account.dto';
+import { ChatService } from '@/chat/chat.service';
 
 const EMAIL_CHANGE_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
@@ -23,6 +24,7 @@ export class UsersService {
     private readonly bcryptService: BcryptService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly mailService: MailService,
+    private readonly chatService: ChatService,
   ) {}
 
   async getMe(userId: string) {
@@ -214,7 +216,10 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string, dto: DeleteAccountDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, avatarUrl: true },
+    });
 
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
@@ -229,8 +234,17 @@ export class UsersService {
       throw new UnauthorizedException('Password is incorrect');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    if (user.avatarUrl) {
+      await this.cloudinaryService.deleteAsset(
+        `pawnd/avatars/${userId}`,
+        'image',
+      );
+    }
+
+    await this.prisma.$transaction(async (transaction) => {
+      await this.chatService.deleteRoomsForUser(transaction, userId);
+
+      await transaction.user.update({
         where: { id: userId },
         data: {
           firstName: 'Deleted',
@@ -243,12 +257,13 @@ export class UsersService {
           address: null,
           status: 'DELETED',
         },
-      }),
-      this.prisma.refreshToken.updateMany({
+      });
+
+      await transaction.refreshToken.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      }),
-    ]);
+      });
+    });
 
     return { message: 'Account deleted successfully' };
   }
