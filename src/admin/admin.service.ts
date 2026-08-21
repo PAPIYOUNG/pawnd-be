@@ -14,6 +14,7 @@ import { GetPetsDto } from '@/admin/dto/get-pets.dto';
 import { GetPostsDto } from '@/admin/dto/get-posts.dto';
 import { UpdatePostStatusDto } from '@/admin/dto/update-post-status.dto';
 import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-post-visibility.dto';
+import { UpdateCommentVisibilityDto } from '@/admin/dto/update-comment-visibility.dto';
 
 @Injectable()
 export class AdminService {
@@ -506,8 +507,52 @@ export class AdminService {
     return { message: 'Community post deleted successfully' };
   }
 
-  updateCommentVisibility() {}
-  deleteComment() {}
+  async updateCommentVisibility(id: string, dto: UpdateCommentVisibilityDto) {
+    const existingComment = await this.prisma.communityComment.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existingComment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const comment = await this.prisma.communityComment.update({
+      where: { id },
+      data: { isHidden: dto.isHidden },
+      select: {
+        id: true,
+        communityPostId: true,
+        userId: true,
+        isHidden: true,
+        updatedAt: true,
+      },
+    });
+
+    this.adminGateway.broadcastCommentUpdated(comment);
+
+    return { comment };
+  }
+
+  async deleteComment(id: string) {
+    const existingComment = await this.prisma.communityComment.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existingComment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contentReport.deleteMany({ where: { commentId: id } });
+      await tx.communityComment.delete({ where: { id } });
+    });
+
+    this.adminGateway.broadcastCommentDeleted({ id });
+
+    return { message: 'Comment deleted successfully' };
+  }
 
   getReports() {}
   reviewReport() {}
