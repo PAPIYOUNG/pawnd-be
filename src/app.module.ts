@@ -24,6 +24,7 @@ import { HomeModule } from './home/home.module';
 
 import { AiModule } from './ai/ai.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AdminModule } from './admin/admin.module';
 import { ChatModule } from './chat/chat.module';
 
 @Module({
@@ -45,6 +46,7 @@ import { ChatModule } from './chat/chat.module';
     DatabaseModule,
     AiModule,
     NotificationsModule,
+    AdminModule,
     ChatModule,
   ],
   controllers: [],
