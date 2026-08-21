@@ -147,7 +147,8 @@ export class HomeService {
         emergencyGuides: [
           {
             id: 'guide-1',
-            title: 'คู่มือ 24 ชั่วโมงแรกเมื่อสัตว์เลี้ยงหาย (First 24 Hours Action Guide)',
+            title:
+              'คู่มือ 24 ชั่วโมงแรกเมื่อสัตว์เลี้ยงหาย (First 24 Hours Action Guide)',
             summary:
               'เริ่มสำรวจรัศมี 1 กม. ทันที พร้อมสร้างใบประกาศ WANTED ด้วย PAWND เพื่อแชร์ลง Social Network',
             category: 'LOST_GUIDE',

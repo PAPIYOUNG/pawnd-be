@@ -155,7 +155,7 @@ export class AuthService {
     const payload = await this.googleAuthService.verifyIdToken(dto.idToken);
 
     const email = payload.email as string;
-    const googleId = payload.sub as string;
+    const googleId = payload.sub;
 
     let user = await this.prisma.user.findUnique({ where: { email } });
 

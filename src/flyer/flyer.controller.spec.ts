@@ -79,7 +79,10 @@ describe('FlyerController', () => {
 
       const result = await controller.getPostFlyer(userId, postId);
 
-      expect(mockFlyerService.getPostFlyer).toHaveBeenCalledWith(userId, postId);
+      expect(mockFlyerService.getPostFlyer).toHaveBeenCalledWith(
+        userId,
+        postId,
+      );
       expect(result).toEqual(expectedResponse);
     });
   });

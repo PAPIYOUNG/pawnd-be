@@ -146,17 +146,33 @@ export class FlyerPdfGenerator {
           valign: 'center',
         });
       } catch {
-        this.drawPhotoPlaceholder(doc, photoBoxX, photoBoxY, photoBoxWidth, photoBoxHeight, boldFont);
+        this.drawPhotoPlaceholder(
+          doc,
+          photoBoxX,
+          photoBoxY,
+          photoBoxWidth,
+          photoBoxHeight,
+          boldFont,
+        );
       }
     } else {
-      this.drawPhotoPlaceholder(doc, photoBoxX, photoBoxY, photoBoxWidth, photoBoxHeight, boldFont);
+      this.drawPhotoPlaceholder(
+        doc,
+        photoBoxX,
+        photoBoxY,
+        photoBoxWidth,
+        photoBoxHeight,
+        boldFont,
+      );
     }
 
     let currentY = photoBoxY + photoBoxHeight + 18;
 
     // 5. Sub-header (Thai): "โปรดช่วยตามหาน้อง" / "พบสัตว์เลี้ยง (ตามหาเจ้าของ)"
     const isLost = data.type === 'LOST';
-    const subTitle = isLost ? 'โปรดช่วยตามหาน้อง' : 'พบสัตว์เลี้ยง (ตามหาเจ้าของ)';
+    const subTitle = isLost
+      ? 'โปรดช่วยตามหาน้อง'
+      : 'พบสัตว์เลี้ยง (ตามหาเจ้าของ)';
 
     doc
       .fillColor('#4A2E19')
@@ -167,7 +183,12 @@ export class FlyerPdfGenerator {
     currentY += 34;
 
     // 6. Pet Name
-    const petName = (data.petName || data.breed || data.petType || 'ไม่ระบุชื่อ').toUpperCase();
+    const petName = (
+      data.petName ||
+      data.breed ||
+      data.petType ||
+      'ไม่ระบุชื่อ'
+    ).toUpperCase();
     doc
       .fillColor('#2A1608')
       .fontSize(38)
@@ -177,20 +198,28 @@ export class FlyerPdfGenerator {
     currentY += 46;
 
     // 7. Bounty / Reward Section (Thai)
-    const rewardVal = data.rewardAmount ? Number(data.rewardAmount).toLocaleString() : null;
+    const rewardVal = data.rewardAmount
+      ? Number(data.rewardAmount).toLocaleString()
+      : null;
 
     if (rewardVal) {
       doc
         .fillColor('#C5221F')
         .fontSize(28)
         .font(boldFont)
-        .text(`รางวัลนำส่ง: ${rewardVal} บาท`, 0, currentY, { align: 'center', width: pageWidth });
+        .text(`รางวัลนำส่ง: ${rewardVal} บาท`, 0, currentY, {
+          align: 'center',
+          width: pageWidth,
+        });
     } else {
       doc
         .fillColor('#5C3D25')
         .fontSize(20)
         .font(boldFont)
-        .text('มีรางวัลตอบแทนสำหรับผู้พบเห็น', 0, currentY + 3, { align: 'center', width: pageWidth });
+        .text('มีรางวัลตอบแทนสำหรับผู้พบเห็น', 0, currentY + 3, {
+          align: 'center',
+          width: pageWidth,
+        });
     }
 
     currentY += 56;
@@ -225,17 +254,27 @@ export class FlyerPdfGenerator {
       month: 'long',
       day: 'numeric',
     });
-    doc.text(`วันที่${isLost ? 'หาย' : 'พบ'}: ${formattedDate}`, detailsX, dY, { width: detailsWidth });
+    doc.text(`วันที่${isLost ? 'หาย' : 'พบ'}: ${formattedDate}`, detailsX, dY, {
+      width: detailsWidth,
+    });
     dY += 25;
 
-    const locationParts = [data.subdistrict, data.district, data.province].filter(Boolean);
+    const locationParts = [
+      data.subdistrict,
+      data.district,
+      data.province,
+    ].filter(Boolean);
     if (locationParts.length > 0) {
-      doc.text(`สถานที่ล่าสุด: ${locationParts.join(', ')}`, detailsX, dY, { width: detailsWidth });
+      doc.text(`สถานที่ล่าสุด: ${locationParts.join(', ')}`, detailsX, dY, {
+        width: detailsWidth,
+      });
       dY += 25;
     }
 
     if (data.distinctiveFeatures) {
-      doc.font(boldFont).text('จุดเด่น / ตำหนิ: ', detailsX, dY, { continued: true });
+      doc
+        .font(boldFont)
+        .text('จุดเด่น / ตำหนิ: ', detailsX, dY, { continued: true });
       doc.font(regFont).text(data.distinctiveFeatures, { width: detailsWidth });
     }
 
@@ -263,7 +302,9 @@ export class FlyerPdfGenerator {
     const contactBoxY = currentY + 168;
     const phone = data.contactPhone ? `ติดต่อ โทร: ${data.contactPhone}` : '';
     const line = data.contactLineId ? `LINE: ${data.contactLineId}` : '';
-    const contactInfo = [phone, line].filter(Boolean).join('     |     ') || 'กรุณาติดต่อเจ้าของผ่านแอป PAWND';
+    const contactInfo =
+      [phone, line].filter(Boolean).join('     |     ') ||
+      'กรุณาติดต่อเจ้าของผ่านแอป PAWND';
 
     doc
       .fillColor('#C5221F')
@@ -288,7 +329,11 @@ export class FlyerPdfGenerator {
       .fillColor('#8A6E55')
       .fontSize(9)
       .font(regFont)
-      .text('PAWND แพลตฟอร์มช่วยตามหาสัตว์เลี้ยง  •  PAWND.APP', 45, pageHeight - 42);
+      .text(
+        'PAWND แพลตฟอร์มช่วยตามหาสัตว์เลี้ยง  •  PAWND.APP',
+        45,
+        pageHeight - 42,
+      );
   }
 
   /**
@@ -304,7 +349,9 @@ export class FlyerPdfGenerator {
 
     const isLost = data.type === 'LOST';
     const mainColor = isLost ? '#DC2626' : '#2563EB';
-    const titleText = isLost ? 'สัตว์เลี้ยงหาย (MISSING PET)' : 'พบสัตว์เลี้ยง (FOUND PET)';
+    const titleText = isLost
+      ? 'สัตว์เลี้ยงหาย (MISSING PET)'
+      : 'พบสัตว์เลี้ยง (FOUND PET)';
 
     doc.rect(40, 40, 515, 60).fill(mainColor);
     doc
@@ -321,10 +368,15 @@ export class FlyerPdfGenerator {
         .fillColor('#78350F')
         .fontSize(22)
         .font(boldFont)
-        .text(`รางวัลนำส่ง: ${Number(data.rewardAmount).toLocaleString()} บาท`, 40, currentY + 12, {
-          align: 'center',
-          width: 515,
-        });
+        .text(
+          `รางวัลนำส่ง: ${Number(data.rewardAmount).toLocaleString()} บาท`,
+          40,
+          currentY + 12,
+          {
+            align: 'center',
+            width: 515,
+          },
+        );
       currentY += 55;
     }
 
@@ -349,10 +401,24 @@ export class FlyerPdfGenerator {
           valign: 'center',
         });
       } catch {
-        this.drawPhotoPlaceholder(doc, imageBoxX, currentY, imageBoxWidth, imageBoxHeight, boldFont);
+        this.drawPhotoPlaceholder(
+          doc,
+          imageBoxX,
+          currentY,
+          imageBoxWidth,
+          imageBoxHeight,
+          boldFont,
+        );
       }
     } else {
-      this.drawPhotoPlaceholder(doc, imageBoxX, currentY, imageBoxWidth, imageBoxHeight, boldFont);
+      this.drawPhotoPlaceholder(
+        doc,
+        imageBoxX,
+        currentY,
+        imageBoxWidth,
+        imageBoxHeight,
+        boldFont,
+      );
     }
     currentY += imageBoxHeight + 15;
 
@@ -367,23 +433,41 @@ export class FlyerPdfGenerator {
     const petTypeThai = this.translatePetType(data.petType);
     const genderThai = this.translateGender(data.gender);
 
-    doc.text(`ชนิด / สายพันธุ์: ${petTypeThai} ${data.breed ? `(${data.breed})` : ''}`, detailsX, detailY);
+    doc.text(
+      `ชนิด / สายพันธุ์: ${petTypeThai} ${data.breed ? `(${data.breed})` : ''}`,
+      detailsX,
+      detailY,
+    );
     detailY += 18;
 
-    doc.text(`เพศ: ${genderThai} | สี: ${data.color || 'ไม่ระบุ'}`, detailsX, detailY);
+    doc.text(
+      `เพศ: ${genderThai} | สี: ${data.color || 'ไม่ระบุ'}`,
+      detailsX,
+      detailY,
+    );
     detailY += 18;
 
     const formattedDate = new Date(data.eventDate).toLocaleDateString('th-TH');
-    doc.text(`วันที่${isLost ? 'หาย' : 'พบ'}: ${formattedDate}`, detailsX, detailY);
+    doc.text(
+      `วันที่${isLost ? 'หาย' : 'พบ'}: ${formattedDate}`,
+      detailsX,
+      detailY,
+    );
     detailY += 18;
 
-    const locationParts = [data.subdistrict, data.district, data.province].filter(Boolean);
+    const locationParts = [
+      data.subdistrict,
+      data.district,
+      data.province,
+    ].filter(Boolean);
     if (locationParts.length > 0) {
       doc.text(`สถานที่: ${locationParts.join(', ')}`, detailsX, detailY);
       detailY += 18;
     }
     if (data.distinctiveFeatures) {
-      doc.font(boldFont).text('จุดเด่น / ตำหนิ: ', detailsX, detailY, { continued: true });
+      doc
+        .font(boldFont)
+        .text('จุดเด่น / ตำหนิ: ', detailsX, detailY, { continued: true });
       doc.font(regFont).text(data.distinctiveFeatures);
     }
 
@@ -429,10 +513,15 @@ export class FlyerPdfGenerator {
       .fillColor('#FFFFFF')
       .fontSize(15)
       .font(boldFont)
-      .text(contactSummary || 'สแกน QR Code ด้านบนเพื่อติดต่อเจ้าของผ่าน PAWND', 40, currentY + 34, {
-        align: 'center',
-        width: 515,
-      });
+      .text(
+        contactSummary || 'สแกน QR Code ด้านบนเพื่อติดต่อเจ้าของผ่าน PAWND',
+        40,
+        currentY + 34,
+        {
+          align: 'center',
+          width: 515,
+        },
+      );
   }
 
   private static drawCornerAccents(doc: PDFKit.PDFDocument, color: string) {
