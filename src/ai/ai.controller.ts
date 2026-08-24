@@ -53,30 +53,37 @@ export class AiController {
   }
 
   @Post('match/:postId')
-  matchPost(@Param('postId') postId: string) {
-    return this.aiMatchingService.matchPost(postId);
+  matchPost(
+    @CurrentUser('sub') userId: string,
+    @Param('postId', ParseUUIDPipe) postId: string,
+  ) {
+    return this.aiMatchingService.matchPost(userId, postId);
   }
 
-  @Get('posts/:id/matches')
-  getPostMatches(@Param('id') id: string) {
-    return this.aiMatchingService.getPostMatches(id);
+  @Get('posts/:postId/matches')
+  getPostMatches(
+    @CurrentUser('sub') userId: string,
+    @Param('postId', ParseUUIDPipe) postId: string,
+  ) {
+    return this.aiMatchingService.getPostMatches(userId, postId);
   }
 
   @Patch('posts/:postId/matches/:matchId/pin')
   togglePinMatch(
+    @CurrentUser('sub') userId: string,
     @Param('postId', ParseUUIDPipe) postId: string,
     @Param('matchId', ParseUUIDPipe) matchId: string,
-    @CurrentUser('sub') userId: string,
   ) {
-    return this.aiMatchingService.togglePinMatch(postId, matchId, userId);
+    return this.aiMatchingService.togglePinMatch(userId, postId, matchId);
   }
 
   @Patch('posts/:postId/matches/:matchId/dismiss')
   toggleDismissMatch(
+    @CurrentUser('sub') userId: string,
     @Param('postId', ParseUUIDPipe) postId: string,
     @Param('matchId', ParseUUIDPipe) matchId: string,
   ) {
-    return this.aiMatchingService.toggleDismissMatch(postId, matchId);
+    return this.aiMatchingService.toggleDismissMatch(userId, postId, matchId);
   }
 
   @Get('matches/:matchId')
