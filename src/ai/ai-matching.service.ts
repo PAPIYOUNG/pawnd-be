@@ -1,18 +1,36 @@
 import { EmbeddingService } from '@/ai/service/embedding.service';
-import { AiMatch } from '@/database/generated/prisma/client';
-import { PostStatus, PostType } from '@/database/generated/prisma/enums';
+import type { AiMatch } from '@/database/generated/prisma/client';
+import {
+  PostEventType,
+  PostStatus,
+  PostType,
+} from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PostEventsService } from '@/post-events/post-events.service';
+
+type PendingAiMatch = {
+  lostPostId: string;
+  foundPostId: string;
+  vectorSimilarity: number;
+  featureScore: number;
+  locationScore: number;
+  dateScore: number;
+  finalScore: number;
+  distanceKm: number;
+};
 
 @Injectable()
 export class AiMatchingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
+    private readonly postEventsService: PostEventsService,
   ) {}
 
   async matchPost(postId: string) {
@@ -59,7 +77,7 @@ export class AiMatchingService {
       },
     });
 
-    const results: AiMatch[] = [];
+    const pendingMatches: PendingAiMatch[] = [];
 
     // 5. คำนวณคะแนน candidate แต่ละตัว
     for (const candidate of candidates) {
@@ -101,48 +119,84 @@ export class AiMatchingService {
       const foundPostId =
         sourcePost.type === PostType.FOUND ? sourcePost.id : candidate.id;
 
-      // 6. ถ้า match เดิมมีแล้ว update
-      // ถ้ายังไม่มีให้ create
-      const match = await this.prisma.aiMatch.upsert({
-        where: {
-          lostPostId_foundPostId: {
-            lostPostId,
-            foundPostId,
-          },
-        },
-
-        create: {
-          lostPostId,
-          foundPostId,
-
-          vectorSimilarity,
-          featureScore,
-          locationScore,
-          dateScore,
-
-          finalScore,
-          distanceKm,
-
-          modelName: 'PAWND_MATCHING_V2',
-          modelVersion: '2.0',
-        },
-
-        update: {
-          vectorSimilarity,
-          featureScore,
-          locationScore,
-          dateScore,
-
-          finalScore,
-          distanceKm,
-
-          modelName: 'PAWND_MATCHING_V2',
-          modelVersion: '2.0',
-        },
+      pendingMatches.push({
+        lostPostId,
+        foundPostId,
+        vectorSimilarity,
+        featureScore,
+        locationScore,
+        dateScore,
+        finalScore,
+        distanceKm,
       });
-
-      results.push(match);
     }
+
+    const results: AiMatch[] =
+      pendingMatches.length === 0
+        ? []
+        : await this.prisma.$transaction(async (tx) => {
+            const persistedMatches: AiMatch[] = [];
+
+            for (const pendingMatch of pendingMatches) {
+              const match = await tx.aiMatch.upsert({
+                where: {
+                  lostPostId_foundPostId: {
+                    lostPostId: pendingMatch.lostPostId,
+                    foundPostId: pendingMatch.foundPostId,
+                  },
+                },
+
+                create: {
+                  lostPostId: pendingMatch.lostPostId,
+                  foundPostId: pendingMatch.foundPostId,
+
+                  vectorSimilarity: pendingMatch.vectorSimilarity,
+                  featureScore: pendingMatch.featureScore,
+                  locationScore: pendingMatch.locationScore,
+                  dateScore: pendingMatch.dateScore,
+
+                  finalScore: pendingMatch.finalScore,
+                  distanceKm: pendingMatch.distanceKm,
+
+                  modelName: 'PAWND_MATCHING_V2',
+                  modelVersion: '2.0',
+                },
+
+                update: {
+                  vectorSimilarity: pendingMatch.vectorSimilarity,
+                  featureScore: pendingMatch.featureScore,
+                  locationScore: pendingMatch.locationScore,
+                  dateScore: pendingMatch.dateScore,
+
+                  finalScore: pendingMatch.finalScore,
+                  distanceKm: pendingMatch.distanceKm,
+
+                  modelName: 'PAWND_MATCHING_V2',
+                  modelVersion: '2.0',
+                },
+              });
+
+              persistedMatches.push(match);
+            }
+
+            const existingEvent = await tx.postEvent.findFirst({
+              where: {
+                postId,
+                eventType: PostEventType.AI_MATCHES_FOUND,
+              },
+              select: { id: true },
+            });
+
+            if (!existingEvent) {
+              await this.postEventsService.recordEvent(tx, {
+                postId,
+                eventType: PostEventType.AI_MATCHES_FOUND,
+                createdBy: null,
+              });
+            }
+
+            return persistedMatches;
+          });
 
     // 7. เรียง match จากคะแนนสูง → ต่ำ
     results.sort((a, b) => Number(b.finalScore) - Number(a.finalScore));
@@ -358,15 +412,23 @@ export class AiMatchingService {
     };
   }
 
-  async togglePinMatch(postId: string, matchId: string) {
+  async togglePinMatch(postId: string, matchId: string, userId: string) {
     const post = await this.prisma.petPost.findUnique({
       where: {
         id: postId,
+      },
+      select: {
+        id: true,
+        userId: true,
       },
     });
 
     if (!post) {
       throw new NotFoundException('Post not found');
+    }
+
+    if (post.userId !== userId) {
+      throw new ForbiddenException('You do not own this post');
     }
 
     const match = await this.prisma.aiMatch.findUnique({
