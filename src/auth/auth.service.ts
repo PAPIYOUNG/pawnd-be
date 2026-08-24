@@ -28,6 +28,8 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { LineAuthService } from '@/infrastructure/line/line-auth.service';
 import { LineLoginDto } from './dto/line-login.dto';
 import { CompleteLineDto } from './dto/complete-line.dto';
+import { ConfigService } from '@nestjs/config';
+import { EnvVariableType } from '@/config/env.validate';
 
 const EMAIL_VERIFICATION_TTL_MINUTES = 5;
 const MAX_OTP_ATTEMPTS = 3;
@@ -45,32 +47,52 @@ export class AuthService {
     private readonly refreshTokenService: RefreshTokenService,
     private readonly googleAuthService: GoogleAuthService,
     private readonly lineAuthService: LineAuthService,
+    private readonly configService: ConfigService<EnvVariableType, true>,
   ) {}
 
   async register(dto: RegisterDto) {
     const passwordHash = await this.bcryptService.hash(dto.password);
 
-    const user = await this.prisma.user.create({
-      data: {
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email: dto.email,
-        passwordHash,
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email,
+          passwordHash,
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      const otp = generateOtp();
+
+      await tx.emailVerification.create({
+        data: {
+          userId: user.id,
+          email: user.email,
+          otpHash: hashToken(otp),
+          expiresAt: new Date(
+            Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60 * 1000,
+          ),
+        },
+      });
+
+      await this.mailService.send({
+        to: user.email,
+        subject: 'Verify your Pawnd account',
+        text: `Your verification code: ${otp}`,
+      });
+
+      return user;
     });
-
-    await this.sendVerificationEmail(user.id, user.email);
-
-    return user;
   }
 
   async login(dto: LoginDto) {
@@ -410,6 +432,10 @@ export class AuthService {
     if (user) {
       const token = generateToken();
 
+      await this.prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id },
+      });
+
       await this.prisma.passwordResetToken.create({
         data: {
           userId: user.id,
@@ -420,10 +446,15 @@ export class AuthService {
         },
       });
 
+      const frontendUrl = this.configService.get('FRONTEND_URL', {
+        infer: true,
+      });
+      const resetLink = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}`;
+
       await this.mailService.send({
         to: user.email,
         subject: 'Reset your Pawnd password',
-        text: `Your password reset token: ${token}`,
+        text: `Click the link to reset your password: ${resetLink}`,
       });
     }
 
