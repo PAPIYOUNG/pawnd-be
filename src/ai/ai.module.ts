@@ -6,10 +6,12 @@ import { AiLogService } from '@/ai/service/ai-log.service';
 import { AiMatchingService } from '@/ai/ai-matching.service';
 import { EmbeddingService } from '@/ai/service/embedding.service';
 import { PetAvatarService } from '@/ai/service/pet-avatar.service';
+import { DatabaseModule } from '@/database/database.module';
 import { UploadModule } from '@/infrastructure/upload/upload.module';
+import { PostEventsModule } from '@/post-events/post-events.module';
 
 @Module({
-  imports: [UploadModule],
+  imports: [DatabaseModule, UploadModule, PostEventsModule],
   controllers: [AiController],
   providers: [
     AiService,

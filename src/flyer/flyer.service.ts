@@ -19,11 +19,7 @@ export class FlyerService {
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  async generateFlyer(
-    _userId: string,
-    postId: string,
-    dto: GenerateFlyerDto,
-  ) {
+  async generateFlyer(_userId: string, postId: string, dto: GenerateFlyerDto) {
     const post = await this.prisma.petPost.findUnique({
       where: { id: postId },
       include: {

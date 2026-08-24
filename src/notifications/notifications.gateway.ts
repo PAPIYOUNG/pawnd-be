@@ -9,9 +9,12 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { AccessTokenService } from '@/infrastructure/jwt/access-token.service';
 
+type AuthenticatedNotificationSocket = Omit<Socket, 'data'> & {
+  data: { userId?: string };
+};
+
 @WebSocketGateway({
   namespace: '/notifications',
-  cors: { origin: '*' },
 })
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -23,7 +26,7 @@ export class NotificationsGateway
 
   constructor(private readonly accessTokenService: AccessTokenService) {}
 
-  async handleConnection(client: Socket) {
+  async handleConnection(client: AuthenticatedNotificationSocket) {
     const token = client.handshake.query.token as string;
 
     if (!token) {
@@ -35,7 +38,7 @@ export class NotificationsGateway
     try {
       const payload = await this.accessTokenService.verify(token);
       client.data.userId = payload.sub;
-      client.join(payload.sub);
+      void client.join(payload.sub);
       this.logger.log(`User ${payload.sub} connected via ${client.id}`);
     } catch {
       this.logger.warn(`Client ${client.id} sent an invalid token`);
@@ -48,7 +51,7 @@ export class NotificationsGateway
   }
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(client: Socket) {
+  handleSubscribe(client: AuthenticatedNotificationSocket) {
     return { event: 'subscribed', data: { userId: client.data.userId } };
   }
 

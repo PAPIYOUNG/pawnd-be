@@ -24,6 +24,10 @@ import { HomeModule } from './home/home.module';
 
 import { AiModule } from './ai/ai.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AdminModule } from './admin/admin.module';
+import { ChatModule } from './chat/chat.module';
+import { PostModule } from './post/post.module';
+import { CommunityModule } from './community/community.module';
 
 @Module({
   imports: [
@@ -44,6 +48,10 @@ import { NotificationsModule } from './notifications/notifications.module';
     DatabaseModule,
     AiModule,
     NotificationsModule,
+    AdminModule,
+    ChatModule,
+    PostModule,
+    CommunityModule,
   ],
   controllers: [],
   providers: [

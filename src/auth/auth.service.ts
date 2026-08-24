@@ -177,7 +177,7 @@ export class AuthService {
     const payload = await this.googleAuthService.verifyIdToken(dto.idToken);
 
     const email = payload.email as string;
-    const googleId = payload.sub as string;
+    const googleId = payload.sub;
 
     let user = await this.prisma.user.findUnique({ where: { email } });
 
@@ -403,7 +403,7 @@ export class AuthService {
       where: { id: userId },
     });
 
-    if (!user) {
+    if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -616,13 +616,13 @@ export class AuthService {
       where: { id: challenge.userId },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid or expired verification code');
-    }
-
     await this.prisma.twoFactorChallenge.delete({
       where: { id: challenge.id },
     });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
 
     await this.prisma.user.update({
       where: { id: user.id },
