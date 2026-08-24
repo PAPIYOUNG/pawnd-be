@@ -15,11 +15,13 @@ export class AiMatchingService {
     private readonly embeddingService: EmbeddingService,
   ) {}
 
-  async matchPost(postId: string) {
+  async matchPost(userId: string, postId: string) {
     // 1. หา post ต้นทาง
-    const sourcePost = await this.prisma.petPost.findUnique({
+    const sourcePost = await this.prisma.petPost.findFirst({
       where: {
         id: postId,
+        userId,
+        status: PostStatus.ACTIVE,
       },
       include: {
         images: true,
@@ -155,7 +157,26 @@ export class AiMatchingService {
     };
   }
 
-  async getPostMatches(postId: string) {
+  private async assertOwnedPost(userId: string, postId: string) {
+    const post = await this.prisma.petPost.findFirst({
+      where: {
+        id: postId,
+        userId,
+        status: { not: PostStatus.DELETED },
+      },
+      select: { id: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found or you do not own this post');
+    }
+
+    return post;
+  }
+
+  async getPostMatches(userId: string, postId: string) {
+    await this.assertOwnedPost(userId, postId);
+
     const post = await this.prisma.petPost.findUnique({
       where: {
         id: postId,
@@ -358,12 +379,8 @@ export class AiMatchingService {
     };
   }
 
-  async togglePinMatch(postId: string, matchId: string) {
-    const post = await this.prisma.petPost.findUnique({
-      where: {
-        id: postId,
-      },
-    });
+  async togglePinMatch(userId: string, postId: string, matchId: string) {
+    const post = await this.assertOwnedPost(userId, postId);
 
     if (!post) {
       throw new NotFoundException('Post not found');
@@ -435,12 +452,8 @@ export class AiMatchingService {
     };
   }
 
-  async toggleDismissMatch(postId: string, matchId: string) {
-    const post = await this.prisma.petPost.findUnique({
-      where: {
-        id: postId,
-      },
-    });
+  async toggleDismissMatch(userId: string, postId: string, matchId: string) {
+    const post = await this.assertOwnedPost(userId, postId);
 
     if (!post) {
       throw new NotFoundException('Post not found');

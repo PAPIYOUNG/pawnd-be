@@ -9,13 +9,31 @@ import { PostStatus } from '@/database/generated/prisma/enums';
 
 import { PrismaService } from '@/database/prisma.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
+import { CloudinaryResourceType } from '@/infrastructure/upload/type/cloudinary-resource.types';
 
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostQueryDto, SearchPostsDto } from './dto/post-query.dto';
+import { FlyerService } from '@/flyer/flyer.service';
+import { FlyerTemplate } from '@/flyer/dto/generate-flyer.dto';
+import { AiMatchingService } from '@/ai/ai-matching.service';
+import { EmbeddingService } from '@/ai/service/embedding.service';
 
 @Injectable()
 export class PostService {
+  private getCloudinaryResourceType(
+    value: string | null | undefined,
+  ): CloudinaryResourceType {
+    switch (value) {
+      case 'image':
+      case 'video':
+      case 'raw':
+        return value;
+      default:
+        return 'image';
+    }
+  }
+
   private readonly publicStatuses: PostStatus[] = [
     PostStatus.ACTIVE,
     PostStatus.REUNITED,
@@ -42,6 +60,9 @@ export class PostService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    private readonly flyerService: FlyerService,
+    private readonly aiMatchingService: AiMatchingService,
+    private readonly embeddingService: EmbeddingService,
   ) {}
 
   async createPost(userId: string, dto: CreatePostDto) {
@@ -87,7 +108,11 @@ export class PostService {
       include: this.postInclude,
     });
 
-    return post;
+    const flyer = await this.flyerService.generateFlyer(userId, post.id, {
+      template: FlyerTemplate.STANDARD,
+    });
+
+    return { post, flyer };
   }
 
   async getAllPosts(query: PostQueryDto) {
@@ -378,27 +403,51 @@ export class PostService {
       }
     }
 
-    const startingSortOrder = await this.prisma.postImage.count({
+    const currentImageCount = await this.prisma.postImage.count({
       where: { postId },
     });
+
+    if (currentImageCount + files.length > 3) {
+      throw new BadRequestException('Maximum 3 images are allowed per post');
+    }
 
     const imageUrls = await Promise.all(
       files.map((file) => this.cloudinary.upload(file)),
     );
 
-    await this.prisma.$transaction(
+    const createdImages = await this.prisma.$transaction(
       imageUrls.map((imageUrl, index) =>
         this.prisma.postImage.create({
           data: {
             postId,
             imageUrl,
-            sortOrder: startingSortOrder + index,
+            sortOrder: currentImageCount + index,
+          },
+          select: {
+            id: true,
+            postId: true,
+            imageUrl: true,
+            sortOrder: true,
           },
         }),
       ),
     );
 
-    return this.getOwnedPost(postId, userId);
+    // Create embeddings for the uploaded images.
+    await Promise.all(
+      createdImages.map((image) =>
+        this.embeddingService.createImageEmbedding(image.id),
+      ),
+    );
+
+    // Match this post with opposite LOST/FOUND posts.
+    const matching = await this.aiMatchingService.matchPost(userId, postId);
+
+    return {
+      post: await this.getOwnedPost(postId, userId),
+      images: createdImages,
+      matching,
+    };
   }
 
   async deletePostImage(postId: string, imageId: string, userId: string) {
@@ -432,7 +481,7 @@ export class PostService {
     if (image.cloudinaryPublicId) {
       await this.cloudinary.deleteAsset(
         image.cloudinaryPublicId,
-        // image.cloudinaryResourceType ?? 'image',
+        this.getCloudinaryResourceType(image.cloudinaryResourceType),
       );
     }
 
