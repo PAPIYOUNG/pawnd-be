@@ -440,7 +440,7 @@ export class AiMatchingService {
       throw new NotFoundException('Post not found');
     }
 
-    if (post.userId !== userId) {
+    if (post.id !== userId) {
       throw new ForbiddenException('You do not own this post');
     }
 
