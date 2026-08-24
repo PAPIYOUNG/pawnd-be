@@ -4,7 +4,6 @@ import { AnalyzeImageDto } from '@/ai/dto/analyze-image.dto';
 import { GeneratePetAvatarDto } from '@/ai/dto/generate-pet-avatar.dto';
 import { EmbeddingService } from '@/ai/service/embedding.service';
 import { PetAvatarService } from '@/ai/service/pet-avatar.service';
-// import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import {
   Body,
