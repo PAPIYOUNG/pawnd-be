@@ -23,6 +23,13 @@ export class MailService {
   }
 
   async send(payload: MailPayload): Promise<void> {
+    if (this.fromEmail === 'noreply@pawnd.dev') {
+      this.logger.log(
+        `[DEV EMAIL] To: ${payload.to} | Subject: ${payload.subject} | Text: ${payload.text}`,
+      );
+      return;
+    }
+
     const { error } = await this.resend.emails.send({
       from: this.fromEmail,
       to: payload.to,

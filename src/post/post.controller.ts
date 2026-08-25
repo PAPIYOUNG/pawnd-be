@@ -32,7 +32,6 @@ export class PostController {
     return this.postService.createPost(userId, createPostDto);
   }
 
-  @Public()
   @Get('me')
   getMyPosts(@CurrentUser('sub') userId: string, @Query() query: PostQueryDto) {
     return this.postService.getMyPosts(userId, query);
