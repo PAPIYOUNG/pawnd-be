@@ -13,6 +13,7 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { UserRole } from '@/database/generated/prisma/enums';
 import { AdminService } from './admin.service';
 import { GetUsersDto } from './dto/get-users.dto';
+import { GetMonthlyTrendDto } from './dto/get-monthly-trend.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { GetPetsDto } from './dto/get-pets.dto';
 import { GetPostsDto } from './dto/get-posts.dto';
@@ -30,6 +31,11 @@ export class AdminController {
   @Get('dashboard')
   getDashboard() {
     return this.adminService.getDashboard();
+  }
+
+  @Get('dashboard/monthly-trend')
+  monthlyTrend(@Query() dto: GetMonthlyTrendDto) {
+    return this.adminService.monthlyTrend(dto.year);
   }
 
   // 2

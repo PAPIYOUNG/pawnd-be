@@ -21,6 +21,13 @@ import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-p
 import { UpdateCommentVisibilityDto } from '@/admin/dto/update-comment-visibility.dto';
 import { ReviewReportDto } from '@/admin/dto/review-report.dto';
 
+export interface MonthlyTrendPoint {
+  month: number;
+  lost: number;
+  found: number;
+  reunited: number;
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -136,6 +143,56 @@ export class AdminService {
     return dashboard;
   }
 
+  async monthlyTrend(year: number): Promise<MonthlyTrendPoint[]> {
+    const startOfYear = new Date(Date.UTC(year, 0, 1));
+    const startOfNextYear = new Date(Date.UTC(year + 1, 0, 1));
+
+    const [lostPosts, foundPosts, reunitedPosts] = await Promise.all([
+      this.prisma.petPost.findMany({
+        where: {
+          type: PostType.LOST,
+          createdAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.petPost.findMany({
+        where: {
+          type: PostType.FOUND,
+          createdAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.petPost.findMany({
+        where: {
+          status: PostStatus.REUNITED,
+          reunitedAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { reunitedAt: true },
+      }),
+    ]);
+
+    const trend: MonthlyTrendPoint[] = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      lost: 0,
+      found: 0,
+      reunited: 0,
+    }));
+
+    for (const post of lostPosts) {
+      trend[post.createdAt.getUTCMonth()].lost += 1;
+    }
+    for (const post of foundPosts) {
+      trend[post.createdAt.getUTCMonth()].found += 1;
+    }
+    for (const post of reunitedPosts) {
+      if (post.reunitedAt) {
+        trend[post.reunitedAt.getUTCMonth()].reunited += 1;
+      }
+    }
+
+    return trend;
+  }
+
   async getUsers(dto: GetUsersDto) {
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
@@ -247,10 +304,7 @@ export class AdminService {
       },
     });
 
-    if (
-      dto.status === UserStatus.SUSPENDED ||
-      dto.status === UserStatus.BLACKLISTED
-    ) {
+    if (dto.status !== UserStatus.ACTIVE) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: id, revokedAt: null },
         data: { revokedAt: new Date() },
