@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { Roles } from '@/common/decorators/role.decorator';
@@ -94,6 +95,11 @@ export class AdminController {
   // 9 >> ไม่ทำ ไม่ลบประกาศ เก็บไว้เป็น History
   //   @Delete('posts/:id')
   //   deletePost() {}
+
+  @Post('posts/:postId/ai-match')
+  triggerAiMatch(@Param('postId', ParseUUIDPipe) postId: string) {
+    return this.adminService.triggerAiMatch(postId);
+  }
 
   // 10
   @Patch('community/posts/:id/hide')

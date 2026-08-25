@@ -20,6 +20,7 @@ import { UpdatePostStatusDto } from '@/admin/dto/update-post-status.dto';
 import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-post-visibility.dto';
 import { UpdateCommentVisibilityDto } from '@/admin/dto/update-comment-visibility.dto';
 import { ReviewReportDto } from '@/admin/dto/review-report.dto';
+import { AiMatchingService } from '@/ai/ai-matching.service';
 
 export interface MonthlyTrendPoint {
   month: number;
@@ -33,6 +34,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminGateway: AdminGateway,
+    private readonly aiMatchingService: AiMatchingService,
   ) {}
 
   async getDashboard() {
@@ -493,6 +495,19 @@ export class AdminService {
     this.adminGateway.broadcastPostStatusUpdated(post);
 
     return { post };
+  }
+
+  async triggerAiMatch(postId: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return this.aiMatchingService.matchPost(post.userId, postId);
   }
 
   async getPostById(id: string) {
