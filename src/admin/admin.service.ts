@@ -495,7 +495,55 @@ export class AdminService {
     return { post };
   }
 
-  deletePost() {}
+  async getPostById(id: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        petName: true,
+        petType: true,
+        breed: true,
+        gender: true,
+        color: true,
+        distinctiveFeatures: true,
+        description: true,
+        eventDate: true,
+        latitude: true,
+        longitude: true,
+        province: true,
+        district: true,
+        subdistrict: true,
+        locationDescription: true,
+        rewardAmount: true,
+        currentLocation: true,
+        contactPhone: true,
+        contactLineId: true,
+        contactEmail: true,
+        viewCount: true,
+        reunitedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+        pet: {
+          select: { id: true, name: true },
+        },
+        images: {
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, imageUrl: true, sortOrder: true },
+        },
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return { post };
+  }
 
   async updateCommunityPostVisibility(
     id: string,

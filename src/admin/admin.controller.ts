@@ -77,6 +77,11 @@ export class AdminController {
     return this.adminService.getPosts(dto);
   }
 
+  @Get('posts/:id')
+  getPostById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getPostById(id);
+  }
+
   // 8
   @Patch('posts/:id')
   updatePostStatus(
