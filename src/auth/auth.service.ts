@@ -142,7 +142,11 @@ export class AuthService {
 
     if (requiresTwoFactor) {
       const tempToken = await this.issueTwoFactorChallenge(user.id, user.email);
-      return { tempToken, message: 'OTP sent to your email' };
+      return {
+        tempToken,
+        type: 'OTP_REQUIRED' as const,
+        message: 'OTP sent to your email',
+      };
     }
 
     const accessToken = await this.accessTokenService.sign({
@@ -287,6 +291,7 @@ export class AuthService {
 
     return {
       tempToken,
+      type: 'LINE_EMAIL_REQUIRED' as const,
       message: 'Please provide your email to continue',
     };
   }
