@@ -25,6 +25,7 @@ export class PetAvatarService {
     // 1. FIND PET
     // =========================================================
 
+
     const pet = await this.prisma.pet.findUnique({
       where: {
         id: dto.petId,
@@ -305,6 +306,12 @@ The final result should clearly look like the same pet shown across all referenc
   }
 
   private isMockMode(): boolean {
-    return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
+    const raw = this.configService.get<boolean | string>('AI_MOCK_MODE');
+    if (raw === false || raw === 'false' || process.env.AI_MOCK_MODE === 'false') return false;
+    if (raw === true || raw === 'true' || process.env.AI_MOCK_MODE === 'true') return true;
+    return false;
   }
 }
+
+
+
