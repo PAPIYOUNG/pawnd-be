@@ -22,6 +22,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
+import { ResendTwoFactorDto } from './dto/resend-2fa.dto';
 import { UserRole, UserStatus } from '@/database/generated/prisma/enums';
 import { GoogleAuthService } from '@/infrastructure/google/google-auth.service';
 import { GoogleLoginDto } from './dto/google-login.dto';
@@ -643,6 +644,43 @@ export class AuthService {
     const refreshToken = await this.refreshTokenService.issue(user.id);
 
     return { accessToken, refreshToken };
+  }
+
+  async resendTwoFactor(dto: ResendTwoFactorDto) {
+    const challenge = await this.prisma.twoFactorChallenge.findFirst({
+      where: { tempTokenHash: hashToken(dto.tempToken) },
+    });
+
+    if (!challenge) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    const otp = generateOtp();
+
+    await this.prisma.twoFactorChallenge.update({
+      where: { id: challenge.id },
+      data: {
+        otpHash: hashToken(otp),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + TWO_FACTOR_TTL_MINUTES * 60 * 1000),
+      },
+    });
+
+    await this.mailService.send({
+      to: user.email,
+      subject: 'Your Pawnd login code',
+      text: `Your login verification code: ${otp}`,
+    });
+
+    return { message: 'Verification code resent' };
   }
 
   private async issueTwoFactorChallenge(
