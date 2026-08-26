@@ -330,6 +330,7 @@ describe('ChatGateway', () => {
       const lastReadAt = new Date('2026-08-20T10:05:00.000Z');
       let resolveRead: (value: {
         readState: { roomId: string; userId: string; lastReadAt: Date };
+        lastReadMessageId: string | null;
       }) => void = () => undefined;
       chatService.markAsRead.mockReturnValue(
         new Promise((resolve) => {
@@ -341,12 +342,16 @@ describe('ChatGateway', () => {
       await Promise.resolve();
 
       expect(roomBroadcaster.emit).not.toHaveBeenCalled();
-      resolveRead({ readState: { roomId, userId, lastReadAt } });
+      resolveRead({
+        readState: { roomId, userId, lastReadAt },
+        lastReadMessageId: 'last-read-message-id',
+      });
       const acknowledgement = await pendingAcknowledgement;
       const expectedPayload = {
         roomId,
         userId,
         lastReadAt: lastReadAt.toISOString(),
+        lastReadMessageId: 'last-read-message-id',
       };
 
       expect(chatService.markAsRead).toHaveBeenCalledWith(userId, roomId);
