@@ -54,7 +54,7 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const passwordHash = await this.bcryptService.hash(dto.password);
 
-    return this.prisma.$transaction(async (tx) => {
+    const { user, otp } = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           firstName: dto.firstName,
@@ -86,14 +86,16 @@ export class AuthService {
         },
       });
 
-      await this.mailService.send({
-        to: user.email,
-        subject: 'Verify your Pawnd account',
-        text: `Your verification code: ${otp}`,
-      });
-
-      return user;
+      return { user, otp };
     });
+
+    await this.mailService.send({
+      to: user.email,
+      subject: 'Verify your Pawnd account',
+      text: `Your verification code: ${otp}`,
+    });
+
+    return user;
   }
 
   async login(dto: LoginDto) {
@@ -204,7 +206,10 @@ export class AuthService {
 
       await this.sendVerificationEmail(user.id, user.email);
 
-      return { message: 'Registration successful, please verify your email' };
+      return {
+        email: user.email,
+        message: 'Registration successful, please verify your email',
+      };
     }
 
     const linkedAccount = await this.prisma.authAccount.findFirst({

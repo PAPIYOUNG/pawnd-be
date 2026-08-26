@@ -44,6 +44,7 @@ export class UsersService {
         notificationEnabled: true,
         twoFactorEnabled: true,
         createdAt: true,
+        passwordHash: true,
       },
     });
 
@@ -51,7 +52,11 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return { user };
+    const { passwordHash, ...userWithoutPasswordHash } = user;
+
+    return {
+      user: { ...userWithoutPasswordHash, hasPassword: !!passwordHash },
+    };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
@@ -218,20 +223,33 @@ export class UsersService {
   async deleteAccount(userId: string, dto: DeleteAccountDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { passwordHash: true, avatarUrl: true },
+      select: { passwordHash: true, avatarUrl: true, email: true },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordMatches = await this.bcryptService.compare(
-      dto.password,
-      user.passwordHash,
-    );
+    if (user.passwordHash) {
+      if (!dto.password) {
+        throw new UnauthorizedException('Password is required');
+      }
 
-    if (!passwordMatches) {
-      throw new UnauthorizedException('Password is incorrect');
+      const passwordMatches = await this.bcryptService.compare(
+        dto.password,
+        user.passwordHash,
+      );
+
+      if (!passwordMatches) {
+        throw new UnauthorizedException('Password is incorrect');
+      }
+    } else {
+      if (
+        !dto.confirmEmail ||
+        dto.confirmEmail.trim().toLowerCase() !== user.email.toLowerCase()
+      ) {
+        throw new UnauthorizedException('Email confirmation does not match');
+      }
     }
 
     if (user.avatarUrl) {
