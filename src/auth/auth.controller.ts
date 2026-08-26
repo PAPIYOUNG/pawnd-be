@@ -17,6 +17,7 @@ import { RefreshTokenDto } from '@/auth/dto/refresh-token.dto';
 import { ForgotPasswordDto } from '@/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from '@/auth/dto/reset-password.dto';
 import { VerifyTwoFactorDto } from '@/auth/dto/verify-2fa.dto';
+import { ResendTwoFactorDto } from '@/auth/dto/resend-2fa.dto';
 import { GoogleLoginDto } from '@/auth/dto/google-login.dto';
 import { LineLoginDto } from '@/auth/dto/line-login.dto';
 import { CompleteLineDto } from '@/auth/dto/complete-line.dto';
@@ -111,6 +112,13 @@ export class AuthController {
   @Post('2fa/verify')
   async verifyTwoFactor(@Body() dto: VerifyTwoFactorDto) {
     return this.authService.verifyTwoFactor(dto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('2fa/resend')
+  async resendTwoFactor(@Body() dto: ResendTwoFactorDto) {
+    return this.authService.resendTwoFactor(dto);
   }
 
   @HttpCode(HttpStatus.OK)

@@ -42,6 +42,7 @@ describe('UsersService deleteAccount', () => {
   };
   const chatService = {
     deleteRoomsForUser: jest.fn(),
+    deleteImageAssetsForUserRooms: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -52,6 +53,7 @@ describe('UsersService deleteAccount', () => {
     });
     bcryptService.compare.mockResolvedValue(true);
     chatService.deleteRoomsForUser.mockResolvedValue({ count: 2 });
+    chatService.deleteImageAssetsForUserRooms.mockResolvedValue(undefined);
     transaction.user.update.mockResolvedValue({ id: userId });
     transaction.refreshToken.updateMany.mockResolvedValue({ count: 1 });
     prisma.$transaction.mockImplementation(
@@ -79,6 +81,9 @@ describe('UsersService deleteAccount', () => {
     ).resolves.toEqual({ message: 'Account deleted successfully' });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(chatService.deleteImageAssetsForUserRooms).toHaveBeenCalledWith(
+      userId,
+    );
     expect(chatService.deleteRoomsForUser).toHaveBeenCalledWith(
       transaction,
       userId,
@@ -117,6 +122,7 @@ describe('UsersService deleteAccount', () => {
     ).rejects.toThrow(new UnauthorizedException('Password is incorrect'));
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(chatService.deleteRoomsForUser).not.toHaveBeenCalled();
+    expect(chatService.deleteImageAssetsForUserRooms).not.toHaveBeenCalled();
     expect(cloudinaryService.deleteAsset).not.toHaveBeenCalled();
   });
 
@@ -163,6 +169,7 @@ describe('UsersService deleteAccount', () => {
       service.deleteAccount(userId, { password: 'correct-password' }),
     ).rejects.toThrow('cloudinary failed');
     expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(chatService.deleteImageAssetsForUserRooms).not.toHaveBeenCalled();
     expect(chatService.deleteRoomsForUser).not.toHaveBeenCalled();
     expect(transaction.user.update).not.toHaveBeenCalled();
     expect(transaction.refreshToken.updateMany).not.toHaveBeenCalled();
@@ -173,6 +180,18 @@ describe('UsersService deleteAccount', () => {
 
     expect(cloudinaryService.deleteAsset).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start account deletion when chat image cleanup fails', async () => {
+    chatService.deleteImageAssetsForUserRooms.mockRejectedValue(
+      new Error('chat image cleanup failed'),
+    );
+
+    await expect(
+      service.deleteAccount(userId, { password: 'correct-password' }),
+    ).rejects.toThrow('chat image cleanup failed');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(chatService.deleteRoomsForUser).not.toHaveBeenCalled();
   });
 
   it('propagates a database error after Cloudinary deletion succeeds', async () => {

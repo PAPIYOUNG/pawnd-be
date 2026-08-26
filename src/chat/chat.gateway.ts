@@ -50,6 +50,13 @@ export class ChatGateway implements OnGatewayInit {
     private readonly chatService: ChatService,
   ) {}
 
+  /** Broadcast ข้อความที่ persist แล้วจาก REST หรือ WebSocket ไปยังสมาชิกในห้อง */
+  broadcastNewMessage(message: ChatMessagePayload): void {
+    this.server
+      .to(this.toSocketRoom(message.roomId))
+      .emit('new_message', message);
+  }
+
   afterInit(server: ChatSocketServer): void {
     server.use((socket, next) => {
       void this.authenticateSocket(socket)
@@ -108,9 +115,7 @@ export class ChatGateway implements OnGatewayInit {
       );
 
       if (result.wasCreated) {
-        this.server
-          .to(this.toSocketRoom(roomId))
-          .emit('new_message', result.message);
+        this.broadcastNewMessage(result.message);
       }
 
       return { message: result.message };
@@ -125,10 +130,8 @@ export class ChatGateway implements OnGatewayInit {
     return this.handleEvent(async () => {
       const dto = await this.validatePayload(ChatRoomEventDto, payload);
       const userId = this.getUserId(socket);
-      const { readState } = await this.chatService.markAsRead(
-        userId,
-        dto.roomId,
-      );
+      const { readState, lastReadMessageId } =
+        await this.chatService.markAsRead(userId, dto.roomId);
 
       if (!readState.lastReadAt) {
         throw new Error('Read state update did not return a timestamp');
@@ -138,6 +141,7 @@ export class ChatGateway implements OnGatewayInit {
         roomId: readState.roomId,
         userId: readState.userId,
         lastReadAt: readState.lastReadAt.toISOString(),
+        lastReadMessageId,
       };
 
       this.server

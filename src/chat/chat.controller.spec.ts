@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChatController } from './chat.controller';
+import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 
 describe('ChatController', () => {
@@ -14,11 +15,17 @@ describe('ChatController', () => {
     markAsRead: jest.fn(),
     deleteRoom: jest.fn(),
   };
+  const chatGateway = {
+    broadcastNewMessage: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ChatController],
-      providers: [{ provide: ChatService, useValue: chatService }],
+      providers: [
+        { provide: ChatService, useValue: chatService },
+        { provide: ChatGateway, useValue: chatGateway },
+      ],
     }).compile();
 
     controller = module.get(ChatController);
@@ -72,7 +79,10 @@ describe('ChatController', () => {
   it('sends a message using the authenticated user identity', async () => {
     const dto = { content: 'Hello', clientMessageId: 'client-1' };
     const expected = { message: { id: 'message-id' } };
-    chatService.sendMessage.mockResolvedValue(expected);
+    chatService.sendMessage.mockResolvedValue({
+      ...expected,
+      wasCreated: true,
+    });
 
     await expect(
       controller.sendMessage('user-id', 'room-id', dto),
@@ -81,7 +91,25 @@ describe('ChatController', () => {
       'user-id',
       'room-id',
       dto,
+      undefined,
     );
+    expect(chatGateway.broadcastNewMessage).toHaveBeenCalledWith(
+      expected.message,
+    );
+  });
+
+  it('does not broadcast an idempotent REST retry twice', async () => {
+    const dto = { content: 'Hello', clientMessageId: 'client-1' };
+    const expected = { message: { id: 'message-id' } };
+    chatService.sendMessage.mockResolvedValue({
+      ...expected,
+      wasCreated: false,
+    });
+
+    await expect(
+      controller.sendMessage('user-id', 'room-id', dto),
+    ).resolves.toEqual(expected);
+    expect(chatGateway.broadcastNewMessage).not.toHaveBeenCalled();
   });
 
   it('marks a room as read for the authenticated user', async () => {
