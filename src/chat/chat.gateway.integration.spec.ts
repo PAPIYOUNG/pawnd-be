@@ -116,6 +116,7 @@ describe('ChatGateway transport integration', () => {
           userId,
           lastReadAt: new Date('2026-08-20T10:05:00.000Z'),
         },
+        lastReadMessageId: 'last-read-message-id',
       }),
     );
 
@@ -305,6 +306,7 @@ describe('ChatGateway transport integration', () => {
       roomId,
       userId: userAId,
       lastReadAt: '2026-08-20T10:05:00.000Z',
+      lastReadMessageId: 'last-read-message-id',
     });
     expect(acknowledgement).toEqual({
       success: true,

@@ -241,6 +241,9 @@ export class UsersService {
       );
     }
 
+    // ห้องแชตจะถูก hard delete ใน transaction จึง cleanup รูปที่ผูกอยู่ก่อน
+    await this.chatService.deleteImageAssetsForUserRooms(userId);
+
     await this.prisma.$transaction(async (transaction) => {
       await this.chatService.deleteRoomsForUser(transaction, userId);
 

@@ -292,6 +292,7 @@ export class AuthService {
 
     return {
       tempToken,
+      type: 'LINE_EMAIL_REQUIRED' as const,
       message: 'Please provide your email to continue',
     };
   }
