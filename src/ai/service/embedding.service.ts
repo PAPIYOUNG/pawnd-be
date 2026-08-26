@@ -1,5 +1,11 @@
 import { OpenRouterEmbeddingResponse } from '@/ai/types/openrouter-embedding.type';
 import { createMockImageEmbedding } from '@/ai/mock-ai.data';
+import { Prisma } from '@/database/generated/prisma/client';
+import {
+  PetType,
+  PostStatus,
+  PostType,
+} from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
 import {
   BadRequestException,
@@ -26,9 +32,7 @@ export class EmbeddingService {
       throw new NotFoundException('Post image not found');
     }
 
-    const model =
-      this.configService.get<string>('AI_IMAGE_EMBEDDING_MODEL') ??
-      'mock/image-embedding';
+    const model = this.getEmbeddingModel();
 
     // เช็กก่อนว่าเคยสร้าง embedding ด้วย model แล้วไหม?
     const existingEmbedding = await this.prisma.$queryRaw<
@@ -126,9 +130,7 @@ export class EmbeddingService {
     sourcePostId: string,
     candidatePostId: string,
   ): Promise<number> {
-    const model =
-      this.configService.get<string>('AI_IMAGE_EMBEDDING_MODEL') ??
-      'mock/image-embedding';
+    const model = this.getEmbeddingModel();
 
     const rows = await this.prisma.$queryRaw<
       Array<{
@@ -170,6 +172,86 @@ export class EmbeddingService {
     `;
 
     return this.clamp(rows[0]?.similarity ?? 0);
+  }
+
+  /**
+   * Generates an embedding from an arbitrary image source (URL or data URL)
+   * without requiring a persisted PostImage row. Reuses the same model,
+   * dimension, and provider call as `createImageEmbedding` so the resulting
+   * vector lives in the same embedding space as stored post images.
+   */
+  async generateEmbeddingFromImageSource(
+    imageSource: string,
+  ): Promise<{ embedding: number[]; model: string }> {
+    const model = this.getEmbeddingModel();
+
+    const embedding = await this.generateImageEmbedding(imageSource, model);
+
+    return { embedding, model };
+  }
+
+  /**
+   * pgvector similarity search against stored image embeddings, aggregated
+   * per post by taking the best-matching image (same MAX() strategy as
+   * `calculatePostSimilarity`). Only ACTIVE posts are searchable.
+   */
+  async findSimilarPosts(
+    embedding: number[],
+    model: string,
+    options: {
+      limit: number;
+      postType?: PostType;
+      petType?: PetType;
+    },
+  ): Promise<Array<{ postId: string; vectorSimilarity: number }>> {
+    const vector = `[${embedding.join(',')}]`;
+
+    const postTypeFilter = options.postType
+      ? Prisma.sql`AND pet_posts."type" = ${options.postType}::"post_type"`
+      : Prisma.empty;
+
+    const petTypeFilter = options.petType
+      ? Prisma.sql`AND pet_posts."pet_type" = ${options.petType}::"pet_type"`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{ postId: string; similarity: number | null }>
+    >(Prisma.sql`
+      SELECT
+        post_images."post_id" AS "postId",
+        MAX(
+          1 - (image_embeddings."embedding" <=> ${vector}::vector)
+        )::double precision AS "similarity"
+
+      FROM "image_embeddings" image_embeddings
+
+      INNER JOIN "post_images" post_images
+        ON post_images."id" = image_embeddings."post_image_id"
+
+      INNER JOIN "pet_posts" pet_posts
+        ON pet_posts."id" = post_images."post_id"
+
+      WHERE image_embeddings."model_name" = ${model}
+        AND pet_posts."status" = ${PostStatus.ACTIVE}::"post_status"
+        ${postTypeFilter}
+        ${petTypeFilter}
+
+      GROUP BY post_images."post_id"
+      ORDER BY "similarity" DESC
+      LIMIT ${options.limit}
+    `);
+
+    return rows.map((row) => ({
+      postId: row.postId,
+      vectorSimilarity: this.clamp(row.similarity ?? 0),
+    }));
+  }
+
+  private getEmbeddingModel(): string {
+    return (
+      this.configService.get<string>('AI_IMAGE_EMBEDDING_MODEL') ??
+      'mock/image-embedding'
+    );
   }
 
   private async saveEmbedding(

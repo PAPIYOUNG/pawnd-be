@@ -3,6 +3,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 import { AiMatchingService } from './ai-matching.service';
+import type { AiService } from './ai.service';
 import type { EmbeddingService } from './service/embedding.service';
 import type { PostEventsService } from '@/post-events/post-events.service';
 import type { PrismaService } from '@/database/prisma.service';
@@ -63,6 +64,9 @@ describe('AiMatchingService', () => {
   const postEventsMock = {
     recordEvent: jest.fn(),
   };
+  const aiServiceMock = {
+    analyzeImage: jest.fn(),
+  };
 
   let service: AiMatchingService;
 
@@ -94,6 +98,7 @@ describe('AiMatchingService', () => {
       prismaMock as unknown as PrismaService,
       embeddingMock as unknown as EmbeddingService,
       postEventsMock as unknown as PostEventsService,
+      aiServiceMock as unknown as AiService,
     );
   });
 
