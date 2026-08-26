@@ -1,5 +1,6 @@
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -11,15 +12,26 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { ChatMessageQueryDto } from './dto/chat-message-query.dto';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
-import { SendChatMessageDto } from './dto/send-chat-message.dto';
+import {
+  ALLOWED_CHAT_IMAGE_MIME_TYPES,
+  CHAT_IMAGE_MAX_SIZE_BYTES,
+  SendChatMessageDto,
+} from './dto/send-chat-message.dto';
 
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly chatGateway: ChatGateway,
+  ) {}
 
   @Post('rooms')
   @HttpCode(HttpStatus.CREATED)
@@ -54,12 +66,39 @@ export class ChatController {
 
   @Post('rooms/:roomId/messages')
   @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: CHAT_IMAGE_MAX_SIZE_BYTES },
+      fileFilter: (_request, file, callback) => {
+        if (!ALLOWED_CHAT_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Only JPEG, PNG, or WEBP chat images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   async sendMessage(
     @CurrentUser('sub') userId: string,
     @Param('roomId', ParseUUIDPipe) roomId: string,
     @Body() dto: SendChatMessageDto,
+    @UploadedFile() image?: Express.Multer.File,
   ) {
-    return this.chatService.sendMessage(userId, roomId, dto);
+    const result = await this.chatService.sendMessage(
+      userId,
+      roomId,
+      dto,
+      image,
+    );
+    if (result.wasCreated) {
+      this.chatGateway.broadcastNewMessage(result.message);
+    }
+    return { message: result.message };
   }
 
   @Patch('rooms/:roomId/read')
