@@ -33,10 +33,13 @@ const envSchema = z.object({
     .default(5000),
   OPENROUTER_API_KEY: z.string().min(1),
   OPENROUTER_BASE_URL: z.string().min(1),
+  // z.coerce.boolean() แปลง string 'false' เป็น true ผิดพลาด (non-empty string ทุกตัวเป็น truthy)
+  // ต้องใช้ custom transform แทน
   AI_MOCK_MODE: z
     .string()
-    .default('true')
-    .transform((value) => value === 'true'),
+    .optional()
+    .transform((val) => val === 'true')
+    .default('false' as unknown as boolean),
   AI_ANALYZE_IMAGE_MODEL: z.string().min(1),
   AI_ANALYZE_IMAGE_MODEL_FREE: z.string().min(1),
   AI_IMAGE_EMBEDDING_MODEL: z.string().min(1),
