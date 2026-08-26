@@ -4,6 +4,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { EnvVariableType } from './config/env.validate';
 import { CorsIoAdapter } from './infrastructure/websocket/cors-io.adapter';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,6 +12,9 @@ async function bootstrap() {
   const allowedOrigins = configService.get('CORS_ALLOWED_ORIGINS', {
     infer: true,
   });
+
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({ origin: allowedOrigins });
   app.useWebSocketAdapter(new CorsIoAdapter(app, allowedOrigins));
