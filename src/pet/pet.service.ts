@@ -50,11 +50,25 @@ export class PetService {
       where: { ownerId },
       select: {
         id: true,
+        ownerId: true,
         name: true,
         type: true,
         breed: true,
         gender: true,
+        color: true,
+        age: true,
+        distinctiveFeatures: true,
+        description: true,
         profileImageUrl: true,
+        images: {
+          select: {
+            id: true,
+            imageUrl: true,
+            isProfile: true,
+            sortOrder: true,
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
         qrCode: {
           select: {
             id: true,
@@ -67,6 +81,8 @@ export class PetService {
             updatedAt: true,
           },
         },
+        createdAt: true,
+        updatedAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -183,22 +199,16 @@ export class PetService {
       await tx.pet.delete({ where: { id: petId } });
     });
 
-    try {
-      await this.cloudinaryService.deletePetQrCode(petId);
-    } catch {
-      // Ignore Cloudinary cleanup failure if no QR was uploaded
-    }
-
-    for (const url of imageUrls) {
-      const publicId = this.extractPublicIdFromUrl(url);
-      if (publicId) {
-        try {
-          await this.cloudinaryService.deleteAsset(publicId, 'image');
-        } catch {
-          // Ignore Cloudinary cleanup failure
-        }
-      }
-    }
+    // ลบไฟล์บน Cloudinary แบบ non-blocking background เพื่อให้ API ตอบสนองได้รวดเร็วทันที ไม่ทำให้หน้าบ้านค้างรอ
+    Promise.allSettled([
+      this.cloudinaryService.deletePetQrCode(petId).catch(() => {}),
+      ...imageUrls.map((url) => {
+        const publicId = this.extractPublicIdFromUrl(url);
+        return publicId
+          ? this.cloudinaryService.deleteAsset(publicId, 'image').catch(() => {})
+          : Promise.resolve();
+      }),
+    ]).catch(() => {});
 
     return { message: 'Pet deleted successfully' };
   }

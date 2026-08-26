@@ -35,12 +35,14 @@ export class FlyerPdfGenerator {
       path.join(__dirname, '../../assets/fonts', fontFilename),
       path.join(process.cwd(), 'src/assets/fonts', fontFilename),
       path.join(process.cwd(), 'dist/src/assets/fonts', fontFilename),
+      path.join(process.cwd(), 'dist/assets/fonts', fontFilename),
     ];
     for (const p of candidates) {
       if (fs.existsSync(p)) return p;
     }
     return null;
   }
+
 
   static async generate(
     data: FlyerPostData,

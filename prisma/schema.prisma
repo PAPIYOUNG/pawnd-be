@@ -169,6 +169,7 @@ model User {
   submittedContentReports ContentReport[]      @relation("ContentReportReporter")
   reviewedContentReports  ContentReport[]      @relation("ContentReportReviewer")
   aiAvatarQuota           AiAvatarQuota?
+  petAvatars              PetAvatar[]
 
   @@index([email])
   @@index([status])
@@ -286,6 +287,7 @@ model Pet {
   images              PetImage[]
   qrCode              PetQrCode?
   posts               PetPost[]
+  avatars             PetAvatar[]
 
   @@index([ownerId])
   @@index([type])
@@ -468,6 +470,23 @@ model AiAvatarQuota {
 
   @@index([userId])
   @@map("ai_avatar_quotas")
+}
+
+model PetAvatar {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  petId     String   @map("pet_id") @db.Uuid
+  imageUrl  String   @map("image_url")
+  style     String?  @default("3D_VOXEL")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pet  Pet  @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([petId])
+  @@index([createdAt])
+  @@map("pet_avatars")
 }
 
 model ai_generation_logs {

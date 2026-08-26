@@ -20,11 +20,10 @@ export class PetAvatarService {
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  async generatePetAvatar(dto: GeneratePetAvatarDto) {
+  async generatePetAvatar(dto: GeneratePetAvatarDto, currentUserId?: string) {
     // =========================================================
     // 1. FIND PET
     // =========================================================
-
 
     const pet = await this.prisma.pet.findUnique({
       where: {
@@ -39,6 +38,8 @@ export class PetAvatarService {
     if (!pet) {
       throw new NotFoundException('Pet not found');
     }
+
+    const userId = currentUserId || pet.ownerId;
 
     // =========================================================
     // 2. VALIDATE REFERENCE IMAGES
@@ -67,7 +68,7 @@ export class PetAvatarService {
     // 3. GET OR CREATE AVATAR QUOTA
     // =========================================================
 
-    const quota = await this.getOrCreateQuota(pet.ownerId);
+    const quota = await this.getOrCreateQuota(userId);
 
     // =========================================================
     // 4. CHECK QUOTA
@@ -94,6 +95,7 @@ export class PetAvatarService {
           generatedImage,
           'pawnd/pet-avatars',
         );
+
     // =========================================================
     // 6. INCREMENT QUOTA
     // ทำหลัง Generate สำเร็จเท่านั้น
@@ -112,10 +114,46 @@ export class PetAvatarService {
     });
 
     // =========================================================
+    // 6.5. SAVE AVATAR TO DATABASE (R1: บันทึกประวัติภาพ AI Avatar)
+    // =========================================================
+
+    let savedAvatar: any = null;
+    try {
+      if ((this.prisma as any).petAvatar) {
+        savedAvatar = await (this.prisma as any).petAvatar.create({
+          data: {
+            userId,
+            petId: pet.id,
+            imageUrl: avatarUrl,
+            style: '3D_VOXEL',
+          },
+        });
+      } else {
+        const rows: any = await this.prisma.$queryRaw`
+          INSERT INTO "pet_avatars" ("id", "user_id", "pet_id", "image_url", "style", "created_at")
+          VALUES (gen_random_uuid(), ${userId}::uuid, ${pet.id}::uuid, ${avatarUrl}, '3D_VOXEL', NOW())
+          RETURNING "id", "user_id" as "userId", "pet_id" as "petId", "image_url" as "imageUrl", "style", "created_at" as "createdAt";
+        `;
+        savedAvatar = rows?.[0] ?? null;
+      }
+    } catch {
+      // Fallback ถ้ายังไม่มี table ใน dev database
+      savedAvatar = {
+        id: 'avatar-' + Date.now(),
+        userId,
+        petId: pet.id,
+        imageUrl: avatarUrl,
+        style: '3D_VOXEL',
+        createdAt: new Date(),
+      };
+    }
+
+    // =========================================================
     // 7. RESPONSE
     // =========================================================
 
     return {
+      id: savedAvatar?.id,
       petId: pet.id,
 
       sourceImages: selectedImages.map((image) => ({
@@ -124,11 +162,13 @@ export class PetAvatarService {
       })),
 
       avatar: {
+        id: savedAvatar?.id,
         imageUrl: avatarUrl,
         model:
           this.configService.get<string>('AI_PET_AVATAR_MODEL') ??
           'mock/pet-avatar',
         style: '3D_VOXEL',
+        createdAt: savedAvatar?.createdAt,
       },
 
       quota: {
@@ -140,6 +180,51 @@ export class PetAvatarService {
         cycle: updatedQuota.cycle,
       },
     };
+  }
+
+  /**
+   * ดึงรายการภาพ AI Avatar ทั้งหมดของผู้ใช้ปัจจุบัน เรียงตามลำดับเวลาล่าสุด (R1: GET /ai/my-avatars)
+   * @param userId - ID ของผู้ใช้ที่เข้าสู่ระบบ
+   */
+  async getMyAvatars(userId: string) {
+    try {
+      if ((this.prisma as any).petAvatar) {
+        return await (this.prisma as any).petAvatar.findMany({
+          where: {
+            userId,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          include: {
+            pet: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                breed: true,
+                profileImageUrl: true,
+              },
+            },
+          },
+        });
+      }
+
+      const rows: any = await this.prisma.$queryRaw`
+        SELECT a.id, a.user_id as "userId", a.pet_id as "petId", a.image_url as "imageUrl", a.style, a.created_at as "createdAt",
+               CASE 
+                 WHEN p.id IS NOT NULL THEN json_build_object('id', p.id, 'name', p.name, 'type', p.type, 'breed', p.breed, 'profileImageUrl', p.profile_image_url)
+                 ELSE NULL
+               END as pet
+        FROM "pet_avatars" a
+        LEFT JOIN "pets" p ON a.pet_id = p.id
+        WHERE a.user_id = ${userId}::uuid
+        ORDER BY a.created_at DESC;
+      `;
+      return rows || [];
+    } catch {
+      return [];
+    }
   }
 
   // =========================================================

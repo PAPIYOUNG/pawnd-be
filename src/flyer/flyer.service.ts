@@ -136,7 +136,7 @@ export class FlyerService {
   }
 
   async getPostFlyer(_userId: string, postId: string) {
-    const flyer = await this.prisma.flyer.findFirst({
+    let flyer = await this.prisma.flyer.findFirst({
       where: { postId },
       orderBy: { generatedAt: 'desc' },
       select: {
@@ -148,7 +148,23 @@ export class FlyerService {
     });
 
     if (!flyer) {
-      throw new NotFoundException('Flyer not found');
+      const port = this.configService.get<number>('PORT', 8000);
+      const backendUrl = `http://localhost:${port}`;
+      const fileUrl = `${backendUrl}/posts/${postId}/flyer/download`;
+
+      flyer = await this.prisma.flyer.create({
+        data: {
+          postId,
+          fileUrl,
+          qrUrl: '',
+        },
+        select: {
+          id: true,
+          fileUrl: true,
+          qrUrl: true,
+          generatedAt: true,
+        },
+      });
     }
 
     return { flyer };
@@ -172,13 +188,24 @@ export class FlyerService {
       throw new NotFoundException('Post not found');
     }
 
-    const flyer = await this.prisma.flyer.findFirst({
+    let flyer = await this.prisma.flyer.findFirst({
       where: { postId },
       orderBy: { generatedAt: 'desc' },
     });
 
     if (!flyer) {
-      throw new NotFoundException('Flyer not found');
+      // สร้างเรคคอร์ด flyer อัตโนมัติทันทีเพื่อให้ดาวน์โหลดและดูตัวอย่างได้เสมอ
+      const port = this.configService.get<number>('PORT', 8000);
+      const backendUrl = `http://localhost:${port}`;
+      const fileUrl = `${backendUrl}/posts/${postId}/flyer/download`;
+
+      await this.prisma.flyer.create({
+        data: {
+          postId,
+          fileUrl,
+          qrUrl: '',
+        },
+      });
     }
 
     const frontendUrl = this.configService.get<string>(

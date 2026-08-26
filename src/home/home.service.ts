@@ -65,12 +65,17 @@ export class HomeService {
         petName: true,
         petType: true,
         breed: true,
+        gender: true,
+        color: true,
         province: true,
         createdAt: true,
         pet: {
           select: {
             name: true,
             type: true,
+            breed: true,
+            gender: true,
+            color: true,
             profileImageUrl: true,
           },
         },
@@ -88,6 +93,9 @@ export class HomeService {
         type: post.type,
         petName: post.petName || post.pet?.name || 'Unknown',
         petType: post.petType || post.pet?.type || 'OTHER',
+        breed: post.breed || post.pet?.breed || null,
+        gender: post.gender || post.pet?.gender || null,
+        color: post.color || post.pet?.color || null,
         province: post.province || 'Unknown',
         coverImageUrl:
           post.images[0]?.imageUrl || post.pet?.profileImageUrl || null,
