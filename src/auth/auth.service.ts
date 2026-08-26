@@ -204,7 +204,10 @@ export class AuthService {
 
       await this.sendVerificationEmail(user.id, user.email);
 
-      return { message: 'Registration successful, please verify your email' };
+      return {
+        email: user.email,
+        message: 'Registration successful, please verify your email',
+      };
     }
 
     const linkedAccount = await this.prisma.authAccount.findFirst({
