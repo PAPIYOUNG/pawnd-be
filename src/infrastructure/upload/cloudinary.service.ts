@@ -59,6 +59,25 @@ export class CloudinaryService {
     });
   }
 
+  /** อัปโหลดรูปแชตด้วย public ID ที่อ้างกลับจาก message ID เพื่อรองรับ cleanup */
+  uploadChatImage(
+    file: Express.Multer.File,
+    messageId: string,
+  ): Promise<string> {
+    return this.uploadBuffer(file.buffer, {
+      resource_type: 'image',
+      folder: 'pawnd/chat',
+      public_id: messageId,
+      overwrite: true,
+      invalidate: true,
+    });
+  }
+
+  /** ลบรูปแชตจาก deterministic public ID โดยไม่ต้องเพิ่ม metadata ใน schema */
+  deleteChatImage(messageId: string): Promise<void> {
+    return this.deleteAsset(`pawnd/chat/${messageId}`, 'image');
+  }
+
   uploadPetQrCode(qrBuffer: Buffer, petId: string): Promise<string> {
     return this.uploadBuffer(qrBuffer, {
       resource_type: 'image',
@@ -127,10 +146,10 @@ export class CloudinaryService {
     resourceType: CloudinaryResourceType = 'image',
   ): Promise<void> {
     try {
-      const result = await cloudinary.uploader.destroy(publicId, {
+      const result = (await cloudinary.uploader.destroy(publicId, {
         resource_type: resourceType,
         invalidate: true,
-      });
+      })) as { result?: string };
 
       if (result.result !== 'ok' && result.result !== 'not found') {
         this.logger.error(`Failed to delete Cloudinary asset: ${publicId}`);

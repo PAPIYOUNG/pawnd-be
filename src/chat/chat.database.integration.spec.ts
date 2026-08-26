@@ -7,6 +7,7 @@ import {
   UserStatus,
 } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import type { EnvVariableType } from '@/config/env.validate';
 import { NotificationsGateway } from '@/notifications/notifications.gateway';
 import { NotificationsService } from '@/notifications/notifications.service';
@@ -39,6 +40,10 @@ describeDatabase('ChatService PostgreSQL integration', () => {
     notifyNewNotification: jest.fn(),
     notifyCountUpdate: jest.fn(),
   };
+  const cloudinaryService = {
+    uploadChatImage: jest.fn(),
+    deleteChatImage: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeAll(async () => {
     const databaseUrl = getGuardedLocalDatabaseUrl();
@@ -54,7 +59,11 @@ describeDatabase('ChatService PostgreSQL integration', () => {
       prisma,
       notificationGateway as unknown as NotificationsGateway,
     );
-    chatService = new ChatService(prisma, notificationsService);
+    chatService = new ChatService(
+      prisma,
+      notificationsService,
+      cloudinaryService as unknown as CloudinaryService,
+    );
   });
 
   beforeEach(() => {
@@ -184,6 +193,22 @@ describeDatabase('ChatService PostgreSQL integration', () => {
       persistedMessage.createdAt.getTime(),
     );
     expect(notifications).toHaveLength(1);
+
+    const unreadMessages = await chatService.listMessages(userBId, roomId, {
+      limit: 30,
+    });
+    expect(unreadMessages.items).toEqual([
+      expect.objectContaining({ id: persistedMessage.id, isRead: false }),
+    ]);
+
+    const readResult = await chatService.markAsRead(userAId, roomId);
+    expect(readResult.lastReadMessageId).toBe(persistedMessage.id);
+    const readMessages = await chatService.listMessages(userBId, roomId, {
+      limit: 30,
+    });
+    expect(readMessages.items).toEqual([
+      expect.objectContaining({ id: persistedMessage.id, isRead: true }),
+    ]);
 
     const retryResult = await chatService.persistMessage(userBId, roomId, {
       content: 'Database integration fixture retry',

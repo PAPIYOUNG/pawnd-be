@@ -4,6 +4,7 @@ import {
   PostStatus,
 } from '@/database/generated/prisma/enums';
 import { PrismaService } from '@/database/prisma.service';
+import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
 import {
   NotificationPersistenceResult,
   NotificationsService,
@@ -15,6 +16,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   ChatMessageQueryDto,
   DEFAULT_CHAT_MESSAGE_LIMIT,
@@ -86,6 +88,15 @@ type UnreadCountRow = {
   unreadCount: number | bigint | string;
 };
 
+type ReadMessageIdRow = {
+  id: string;
+};
+
+type ChatImageAttachment = {
+  messageId: string;
+  imageUrl: string;
+};
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -93,6 +104,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async createOrGetRoom(userId: string, dto: CreateChatRoomDto) {
@@ -255,33 +267,93 @@ export class ChatService {
     });
     const hasNextPage = messages.length > limit;
     const items = hasNextPage ? messages.slice(0, limit) : messages;
+    const readMessageIds = await this.findReadOwnMessageIds(
+      userId,
+      roomId,
+      items,
+    );
 
     return {
-      items,
+      items: items.map((message) => ({
+        ...message,
+        isRead: readMessageIds.has(message.id),
+      })),
       nextCursor: hasNextPage ? (items.at(-1)?.id ?? null) : null,
     };
   }
 
-  async sendMessage(userId: string, roomId: string, dto: SendChatMessageDto) {
-    const result = await this.persistMessage(userId, roomId, dto);
+  /** รับข้อความ REST และดูแลรูปที่อัปโหลดไม่ให้ตกค้างเมื่อ persist ไม่สำเร็จ */
+  async sendMessage(
+    userId: string,
+    roomId: string,
+    dto: SendChatMessageDto,
+    image?: Express.Multer.File,
+  ) {
+    const content = dto.content?.trim() ?? '';
+    if (!content && !image) {
+      throw new BadRequestException('Message content or image is required');
+    }
 
-    return { message: result.message };
+    await this.assertActiveMember(userId, roomId);
+
+    let attachment: ChatImageAttachment | undefined;
+    if (image) {
+      this.assertValidChatImage(image);
+      const messageId = randomUUID();
+      const imageUrl = await this.cloudinaryService.uploadChatImage(
+        image,
+        messageId,
+      );
+      attachment = { messageId, imageUrl };
+    }
+
+    try {
+      const result = await this.persistMessage(
+        userId,
+        roomId,
+        { ...dto, content },
+        attachment,
+      );
+
+      if (attachment && !result.wasCreated) {
+        await this.cleanupUncommittedChatImage(attachment.messageId);
+      }
+
+      return result;
+    } catch (error: unknown) {
+      if (attachment) {
+        await this.cleanupUncommittedChatImage(attachment.messageId);
+      }
+      throw error;
+    }
   }
 
   async persistMessage(
     userId: string,
     roomId: string,
     dto: SendChatMessageDto,
+    attachment?: ChatImageAttachment,
   ) {
     await this.assertActiveMember(userId, roomId);
+
+    const content = dto.content?.trim() ?? '';
+    if (!content && !attachment) {
+      throw new BadRequestException('Message content or image is required');
+    }
 
     try {
       const result = await this.prisma.$transaction(async (transaction) => {
         const createdMessage = await transaction.chatMessage.create({
           data: {
+            ...(attachment
+              ? {
+                  id: attachment.messageId,
+                  imageUrl: attachment.imageUrl,
+                }
+              : {}),
             roomId,
             senderId: userId,
-            content: dto.content,
+            content,
             clientMessageId: dto.clientMessageId,
           },
           select: MESSAGE_SELECT,
@@ -335,6 +407,17 @@ export class ChatService {
   async markAsRead(userId: string, roomId: string) {
     await this.assertActiveMember(userId, roomId);
 
+    // ส่ง message ID เป็น boundary ให้ client แทนการเทียบ timestamp ที่เสีย precision ใน JavaScript
+    const lastReadMessage = await this.prisma.chatMessage.findFirst({
+      where: {
+        roomId,
+        senderId: { not: userId },
+        deletedAt: null,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+
     const readState = await this.prisma.chatRoomMember.update({
       where: { roomId_userId: { roomId, userId } },
       data: { lastReadAt: new Date() },
@@ -345,10 +428,23 @@ export class ChatService {
       },
     });
 
-    return { readState };
+    return {
+      readState,
+      lastReadMessageId: lastReadMessage?.id ?? null,
+    };
   }
 
   async deleteRoom(userId: string, roomId: string): Promise<void> {
+    // ตรวจสิทธิ์ก่อนอ่านรายการ asset และลบรูปก่อน hard delete เพื่อไม่ทิ้ง orphan บน Cloudinary
+    await this.assertActiveMember(userId, roomId);
+    const imageMessages = await this.prisma.chatMessage.findMany({
+      where: { roomId, imageUrl: { not: null } },
+      select: { id: true },
+    });
+    await Promise.all(
+      imageMessages.map(({ id }) => this.cloudinaryService.deleteChatImage(id)),
+    );
+
     try {
       await this.prisma.$transaction(async (transaction) => {
         await this.assertActiveMemberWithClient(transaction, userId, roomId);
@@ -361,6 +457,20 @@ export class ChatService {
 
       throw error;
     }
+  }
+
+  /** ลบรูปของห้องที่จะถูก hard delete ใน flow ลบบัญชีก่อนเริ่ม transaction */
+  async deleteImageAssetsForUserRooms(userId: string): Promise<void> {
+    const imageMessages = await this.prisma.chatMessage.findMany({
+      where: {
+        imageUrl: { not: null },
+        room: { members: { some: { userId } } },
+      },
+      select: { id: true },
+    });
+    await Promise.all(
+      imageMessages.map(({ id }) => this.cloudinaryService.deleteChatImage(id)),
+    );
   }
 
   deleteRoomsForUser(
@@ -437,6 +547,39 @@ export class ChatService {
     );
   }
 
+  /** ให้ PostgreSQL เทียบเวลาอ่านกับเวลา message โดยตรงเพื่อรักษา microsecond precision */
+  private async findReadOwnMessageIds(
+    userId: string,
+    roomId: string,
+    messages: Array<{ id: string; senderId: string }>,
+  ): Promise<Set<string>> {
+    const ownMessageIds = messages
+      .filter((message) => message.senderId === userId)
+      .map((message) => message.id);
+    if (ownMessageIds.length === 0) return new Set();
+
+    const rows = await this.prisma.$queryRaw<ReadMessageIdRow[]>(Prisma.sql`
+      SELECT own_message.id
+      FROM chat_messages AS own_message
+      WHERE own_message.room_id = ${roomId}::uuid
+        AND own_message.sender_id = ${userId}::uuid
+        AND own_message.id IN (${Prisma.join(
+          ownMessageIds.map((id) => Prisma.sql`${id}::uuid`),
+        )})
+        AND EXISTS (
+          SELECT 1
+          FROM chat_room_members AS reader
+          WHERE reader.room_id = own_message.room_id
+            AND reader.user_id <> ${userId}::uuid
+            AND reader.left_at IS NULL
+            AND reader.last_read_at IS NOT NULL
+            AND own_message.created_at <= reader.last_read_at
+        )
+    `);
+
+    return new Set(rows.map(({ id }) => id));
+  }
+
   private async publishNotifications(
     notifications: NotificationPersistenceResult[],
   ): Promise<void> {
@@ -453,6 +596,43 @@ export class ChatService {
     if (failedCount > 0) {
       this.logger.warn(
         `Failed to publish ${failedCount} chat notification event(s) after commit`,
+      );
+    }
+  }
+
+  /** ตรวจ signature ของไฟล์จริงเพิ่มเติมจาก MIME ที่ client ส่งมา */
+  private assertValidChatImage(image: Express.Multer.File): void {
+    const buffer = image.buffer;
+    const isJpeg =
+      image.mimetype === 'image/jpeg' &&
+      buffer.length >= 3 &&
+      buffer[0] === 0xff &&
+      buffer[1] === 0xd8 &&
+      buffer[2] === 0xff;
+    const isPng =
+      image.mimetype === 'image/png' &&
+      buffer.length >= 8 &&
+      buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const isWebp =
+      image.mimetype === 'image/webp' &&
+      buffer.length >= 12 &&
+      buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+
+    if (!isJpeg && !isPng && !isWebp) {
+      throw new BadRequestException('Chat image content is invalid');
+    }
+  }
+
+  /** Cleanup เฉพาะรูปใหม่ที่ยังไม่ได้ผูกกับข้อความที่ commit สำเร็จ */
+  private async cleanupUncommittedChatImage(messageId: string): Promise<void> {
+    try {
+      await this.cloudinaryService.deleteChatImage(messageId);
+    } catch {
+      this.logger.warn(
+        `Failed to clean up chat image for message ${messageId}`,
       );
     }
   }

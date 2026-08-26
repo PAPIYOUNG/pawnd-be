@@ -13,6 +13,7 @@ export type ChatReadUpdatedPayload = {
   roomId: string;
   userId: string;
   lastReadAt: string;
+  lastReadMessageId: string | null;
 };
 
 export type ChatMessagePayload = Awaited<
