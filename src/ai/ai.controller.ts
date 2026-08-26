@@ -96,9 +96,15 @@ export class AiController {
 
   @Post('generate-pet-avatar')
   generatePetAvatar(
+    @CurrentUser('sub') userId: string,
     @Body()
     dto: GeneratePetAvatarDto,
   ) {
-    return this.petAvatarService.generatePetAvatar(dto);
+    return this.petAvatarService.generatePetAvatar(dto, userId);
+  }
+
+  @Get('my-avatars')
+  getMyAvatars(@CurrentUser('sub') userId: string) {
+    return this.petAvatarService.getMyAvatars(userId);
   }
 }
