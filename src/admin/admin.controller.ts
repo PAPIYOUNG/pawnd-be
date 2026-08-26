@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { Roles } from '@/common/decorators/role.decorator';
@@ -13,6 +14,7 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { UserRole } from '@/database/generated/prisma/enums';
 import { AdminService } from './admin.service';
 import { GetUsersDto } from './dto/get-users.dto';
+import { GetMonthlyTrendDto } from './dto/get-monthly-trend.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { GetPetsDto } from './dto/get-pets.dto';
 import { GetPostsDto } from './dto/get-posts.dto';
@@ -30,6 +32,11 @@ export class AdminController {
   @Get('dashboard')
   getDashboard() {
     return this.adminService.getDashboard();
+  }
+
+  @Get('dashboard/monthly-trend')
+  monthlyTrend(@Query() dto: GetMonthlyTrendDto) {
+    return this.adminService.monthlyTrend(dto.year);
   }
 
   // 2
@@ -71,6 +78,11 @@ export class AdminController {
     return this.adminService.getPosts(dto);
   }
 
+  @Get('posts/:id')
+  getPostById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getPostById(id);
+  }
+
   // 8
   @Patch('posts/:id')
   updatePostStatus(
@@ -83,6 +95,11 @@ export class AdminController {
   // 9 >> ไม่ทำ ไม่ลบประกาศ เก็บไว้เป็น History
   //   @Delete('posts/:id')
   //   deletePost() {}
+
+  @Post('posts/:postId/ai-match')
+  triggerAiMatch(@Param('postId', ParseUUIDPipe) postId: string) {
+    return this.adminService.triggerAiMatch(postId);
+  }
 
   // 10
   @Patch('community/posts/:id/hide')

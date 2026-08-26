@@ -181,7 +181,11 @@ Field requirements:
         throw new Error('AI returned empty response');
       }
 
-      return JSON.parse(content) as AiAnalysisResult;
+      const result = JSON.parse(content) as AiAnalysisResult;
+
+      console.log('[AiService.analyzeImage] result:', result);
+
+      return result;
     } catch (error: unknown) {
       await this.createAiErrorLog(
         ai_feature.ANALYZE_IMAGE,

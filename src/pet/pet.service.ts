@@ -57,7 +57,14 @@ export class PetService {
         profileImageUrl: true,
         qrCode: {
           select: {
+            id: true,
+            petId: true,
             qrToken: true,
+            qrImageUrl: true,
+            publicProfileUrl: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
           },
         },
       },
@@ -96,10 +103,13 @@ export class PetService {
         qrCode: {
           select: {
             id: true,
+            petId: true,
             qrToken: true,
             qrImageUrl: true,
             publicProfileUrl: true,
             isActive: true,
+            createdAt: true,
+            updatedAt: true,
           },
         },
       },

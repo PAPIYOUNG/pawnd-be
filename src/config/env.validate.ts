@@ -49,7 +49,6 @@ const envSchema = z.object({
   GMAIL_SMTP_APP_PASSWORD: z.string().min(1),
 });
 
-
 type ParsedEnvironment = z.infer<typeof envSchema>;
 
 export type EnvVariableType = Omit<

@@ -20,12 +20,21 @@ import { UpdatePostStatusDto } from '@/admin/dto/update-post-status.dto';
 import { UpdateCommunityPostVisibilityDto } from '@/admin/dto/update-community-post-visibility.dto';
 import { UpdateCommentVisibilityDto } from '@/admin/dto/update-comment-visibility.dto';
 import { ReviewReportDto } from '@/admin/dto/review-report.dto';
+import { AiMatchingService } from '@/ai/ai-matching.service';
+
+export interface MonthlyTrendPoint {
+  month: number;
+  lost: number;
+  found: number;
+  reunited: number;
+}
 
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly adminGateway: AdminGateway,
+    private readonly aiMatchingService: AiMatchingService,
   ) {}
 
   async getDashboard() {
@@ -134,6 +143,56 @@ export class AdminService {
     this.adminGateway.broadcastDashboardStats(dashboard);
 
     return dashboard;
+  }
+
+  async monthlyTrend(year: number): Promise<MonthlyTrendPoint[]> {
+    const startOfYear = new Date(Date.UTC(year, 0, 1));
+    const startOfNextYear = new Date(Date.UTC(year + 1, 0, 1));
+
+    const [lostPosts, foundPosts, reunitedPosts] = await Promise.all([
+      this.prisma.petPost.findMany({
+        where: {
+          type: PostType.LOST,
+          createdAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.petPost.findMany({
+        where: {
+          type: PostType.FOUND,
+          createdAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { createdAt: true },
+      }),
+      this.prisma.petPost.findMany({
+        where: {
+          status: PostStatus.REUNITED,
+          reunitedAt: { gte: startOfYear, lt: startOfNextYear },
+        },
+        select: { reunitedAt: true },
+      }),
+    ]);
+
+    const trend: MonthlyTrendPoint[] = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      lost: 0,
+      found: 0,
+      reunited: 0,
+    }));
+
+    for (const post of lostPosts) {
+      trend[post.createdAt.getUTCMonth()].lost += 1;
+    }
+    for (const post of foundPosts) {
+      trend[post.createdAt.getUTCMonth()].found += 1;
+    }
+    for (const post of reunitedPosts) {
+      if (post.reunitedAt) {
+        trend[post.reunitedAt.getUTCMonth()].reunited += 1;
+      }
+    }
+
+    return trend;
   }
 
   async getUsers(dto: GetUsersDto) {
@@ -247,10 +306,7 @@ export class AdminService {
       },
     });
 
-    if (
-      dto.status === UserStatus.SUSPENDED ||
-      dto.status === UserStatus.BLACKLISTED
-    ) {
+    if (dto.status !== UserStatus.ACTIVE) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: id, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -441,7 +497,115 @@ export class AdminService {
     return { post };
   }
 
-  deletePost() {}
+  async triggerAiMatch(postId: string) {
+    const post = await this.prisma.petPost.findUnique({
+      where: { id: postId },
+      select: { userId: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return this.aiMatchingService.matchPost(post.userId, postId);
+  }
+
+  async getPostById(id: string) {
+    const matchedPostSelect = {
+      id: true,
+      petName: true,
+      petType: true,
+      breed: true,
+      type: true,
+      status: true,
+      images: {
+        orderBy: { sortOrder: 'asc' as const },
+        take: 1,
+        select: { imageUrl: true },
+      },
+    } satisfies Prisma.PetPostSelect;
+
+    const [post, matches] = await Promise.all([
+      this.prisma.petPost.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          petName: true,
+          petType: true,
+          breed: true,
+          gender: true,
+          color: true,
+          distinctiveFeatures: true,
+          description: true,
+          eventDate: true,
+          latitude: true,
+          longitude: true,
+          province: true,
+          district: true,
+          subdistrict: true,
+          locationDescription: true,
+          rewardAmount: true,
+          currentLocation: true,
+          contactPhone: true,
+          contactLineId: true,
+          contactEmail: true,
+          viewCount: true,
+          reunitedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+          pet: {
+            select: { id: true, name: true },
+          },
+          images: {
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, imageUrl: true, sortOrder: true },
+          },
+        },
+      }),
+      this.prisma.aiMatch.findMany({
+        where: { OR: [{ lostPostId: id }, { foundPostId: id }] },
+        orderBy: { finalScore: 'desc' },
+        select: {
+          id: true,
+          lostPostId: true,
+          vectorSimilarity: true,
+          featureScore: true,
+          locationScore: true,
+          dateScore: true,
+          finalScore: true,
+          distanceKm: true,
+          isNotified: true,
+          createdAt: true,
+          lostPost: { select: matchedPostSelect },
+          foundPost: { select: matchedPostSelect },
+        },
+      }),
+    ]);
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const aiMatches = matches.map((match) => ({
+      matchId: match.id,
+      finalScore: match.finalScore,
+      vectorSimilarity: match.vectorSimilarity,
+      featureScore: match.featureScore,
+      locationScore: match.locationScore,
+      dateScore: match.dateScore,
+      distanceKm: match.distanceKm,
+      isNotified: match.isNotified,
+      createdAt: match.createdAt,
+      matchedPost: match.lostPostId === id ? match.foundPost : match.lostPost,
+    }));
+
+    return { post, aiMatches };
+  }
 
   async updateCommunityPostVisibility(
     id: string,
