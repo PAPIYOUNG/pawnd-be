@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 
 import { Prisma } from '@/database/generated/prisma/client';
-import { PostStatus } from '@/database/generated/prisma/enums';
+import { PostEventType, PostStatus } from '@/database/generated/prisma/enums';
 
 import { PrismaService } from '@/database/prisma.service';
 import { CloudinaryService } from '@/infrastructure/upload/cloudinary.service';
@@ -18,6 +18,7 @@ import { FlyerService } from '@/flyer/flyer.service';
 import { FlyerTemplate } from '@/flyer/dto/generate-flyer.dto';
 import { AiMatchingService } from '@/ai/ai-matching.service';
 import { EmbeddingService } from '@/ai/service/embedding.service';
+import { PostEventsService } from '@/post-events/post-events.service';
 
 @Injectable()
 export class PostService {
@@ -63,6 +64,7 @@ export class PostService {
     private readonly flyerService: FlyerService,
     private readonly aiMatchingService: AiMatchingService,
     private readonly embeddingService: EmbeddingService,
+    private readonly postEventsService: PostEventsService,
   ) {}
 
   async createPost(userId: string, dto: CreatePostDto) {
@@ -80,32 +82,43 @@ export class PostService {
       }
     }
 
-    const post = await this.prisma.petPost.create({
-      data: {
-        userId,
-        petId: dto.petId,
-        type: dto.type,
-        petName: dto.petName,
-        petType: dto.petType,
-        breed: dto.breed,
-        gender: dto.gender,
-        color: dto.color,
-        distinctiveFeatures: dto.distinctiveFeatures,
-        description: dto.description,
-        eventDate: new Date(dto.eventDate),
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        province: dto.province,
-        district: dto.district,
-        subdistrict: dto.subdistrict,
-        locationDescription: dto.locationDescription,
-        rewardAmount: dto.rewardAmount,
-        currentLocation: dto.currentLocation,
-        contactPhone: dto.contactPhone,
-        contactLineId: dto.contactLineId,
-        contactEmail: dto.contactEmail,
-      } satisfies Prisma.PetPostUncheckedCreateInput,
-      include: this.postInclude,
+    // บันทึกประกาศและเหตุการณ์แรกให้สำเร็จหรือล้มเหลวไปพร้อมกัน
+    const post = await this.prisma.$transaction(async (tx) => {
+      const createdPost = await tx.petPost.create({
+        data: {
+          userId,
+          petId: dto.petId,
+          type: dto.type,
+          petName: dto.petName,
+          petType: dto.petType,
+          breed: dto.breed,
+          gender: dto.gender,
+          color: dto.color,
+          distinctiveFeatures: dto.distinctiveFeatures,
+          description: dto.description,
+          eventDate: new Date(dto.eventDate),
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          province: dto.province,
+          district: dto.district,
+          subdistrict: dto.subdistrict,
+          locationDescription: dto.locationDescription,
+          rewardAmount: dto.rewardAmount,
+          currentLocation: dto.currentLocation,
+          contactPhone: dto.contactPhone,
+          contactLineId: dto.contactLineId,
+          contactEmail: dto.contactEmail,
+        } satisfies Prisma.PetPostUncheckedCreateInput,
+        include: this.postInclude,
+      });
+
+      await this.postEventsService.recordEvent(tx, {
+        postId: createdPost.id,
+        eventType: PostEventType.POST_CREATED,
+        createdBy: userId,
+      });
+
+      return createdPost;
     });
 
     const flyer = await this.flyerService.generateFlyer(userId, post.id, {
@@ -350,19 +363,39 @@ export class PostService {
   }
 
   async changeStatus(id: string, userId: string, status: PostStatus) {
-    await this.getOwnedPost(id, userId);
+    const existingPost = await this.getOwnedPost(id, userId);
 
     if (status === PostStatus.DELETED) {
       throw new BadRequestException('Use DELETE /posts/:id to delete a post');
     }
 
-    return this.prisma.petPost.update({
-      where: { id },
-      data: {
-        status,
-        reunitedAt: status === PostStatus.REUNITED ? new Date() : null,
-      },
-      include: this.postInclude,
+    // เปลี่ยนสถานะและเพิ่มเหตุการณ์ใน transaction เดียวกันเพื่อไม่ให้ timeline ขาดตอน
+    return this.prisma.$transaction(async (tx) => {
+      const updatedPost = await tx.petPost.update({
+        where: { id },
+        data: {
+          status,
+          reunitedAt: status === PostStatus.REUNITED ? new Date() : null,
+        },
+        include: this.postInclude,
+      });
+
+      const eventType =
+        status === PostStatus.REUNITED
+          ? PostEventType.REUNITED
+          : status === PostStatus.CLOSED
+            ? PostEventType.POST_CLOSED
+            : null;
+
+      if (eventType && existingPost.status !== status) {
+        await this.postEventsService.recordEvent(tx, {
+          postId: id,
+          eventType,
+          createdBy: userId,
+        });
+      }
+
+      return updatedPost;
     });
   }
 
