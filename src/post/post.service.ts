@@ -395,6 +395,18 @@ export class PostService {
         });
       }
 
+      // เปิดประกาศอีกครั้งจาก REUNITED กลับเป็น ACTIVE: ลบเหตุการณ์ "กลับบ้านแล้ว" เดิมออกจาก timeline
+      // เพื่อไม่ให้ความคืบหน้าประกาศค้างแสดงว่ากลับบ้านแล้วทั้งที่สถานะกลับมาตามหาอยู่
+      if (
+        status === PostStatus.ACTIVE &&
+        existingPost.status === PostStatus.REUNITED
+      ) {
+        await this.postEventsService.deleteEventsByType(tx, {
+          postId: id,
+          eventType: PostEventType.REUNITED,
+        });
+      }
+
       return updatedPost;
     });
   }
