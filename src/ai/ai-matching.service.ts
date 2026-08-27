@@ -378,9 +378,10 @@ export class AiMatchingService {
     return post;
   }
 
-  // อ่านได้ทุกคนที่ login แล้ว ไม่จำกัดเฉพาะเจ้าของประกาศ (สิทธิ์แก้ไข Pin/Dismiss/สั่งจับคู่ใหม่
-  // ยังคงจำกัดเฉพาะเจ้าของผ่าน assertOwnedPost ใน togglePinMatch/toggleDismissMatch/matchPost)
-  async getPostMatches(_userId: string, postId: string) {
+  // เป็น public endpoint อ่านได้ทุกคนแม้ไม่ login (ไม่มี personalization ต่อ user — pin/dismiss
+  // เป็น per-post action ที่แชร์กันทุกคนที่ดู) สิทธิ์แก้ไข Pin/Dismiss/สั่งจับคู่ใหม่
+  // ยังคงจำกัดเฉพาะเจ้าของผ่าน assertOwnedPost ใน togglePinMatch/toggleDismissMatch/matchPost
+  async getPostMatches(postId: string) {
     const post = await this.prisma.petPost.findUnique({
       where: {
         id: postId,

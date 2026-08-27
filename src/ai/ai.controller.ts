@@ -6,6 +6,7 @@ import { SearchByImageDto } from '@/ai/dto/search-by-image.dto';
 import { EmbeddingService } from '@/ai/service/embedding.service';
 import { PetAvatarService } from '@/ai/service/pet-avatar.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import {
   BadRequestException,
   Body,
@@ -72,12 +73,10 @@ export class AiController {
     return this.aiMatchingService.matchPost(userId, postId);
   }
 
+  @Public()
   @Get('posts/:postId/matches')
-  getPostMatches(
-    @CurrentUser('sub') userId: string,
-    @Param('postId', ParseUUIDPipe) postId: string,
-  ) {
-    return this.aiMatchingService.getPostMatches(userId, postId);
+  getPostMatches(@Param('postId', ParseUUIDPipe) postId: string) {
+    return this.aiMatchingService.getPostMatches(postId);
   }
 
   @Patch('posts/:postId/matches/:matchId/pin')
