@@ -6,9 +6,10 @@ describe('PostController', () => {
   let controller: PostController;
 
   beforeEach(async () => {
+    // ใช้ mock เพื่อให้ controller test ไม่ต้องสร้าง dependency ของ service ทั้งชุด
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PostController],
-      providers: [PostService],
+      providers: [{ provide: PostService, useValue: {} }],
     }).compile();
 
     controller = module.get<PostController>(PostController);
