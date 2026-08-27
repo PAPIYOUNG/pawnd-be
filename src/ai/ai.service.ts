@@ -65,16 +65,54 @@ export class AiService {
       return { ...MOCK_AI_ANALYSIS_RESULT };
     }
 
+    try {
+      return await this.runImageAnalysis(requestedModel, imageUrl);
+    } catch (error: unknown) {
+      await this.createAiErrorLog(
+        ai_feature.ANALYZE_IMAGE,
+        requestedModel,
+        error,
+      );
+
+      if (!this.isRateLimitError(error)) {
+        throw error;
+      }
+
+      const fallbackModel = this.configService.getOrThrow<string>(
+        'AI_ANALYZE_IMAGE_MODEL_FREE',
+      );
+
+      console.warn(
+        `[AiService.analyzeImage] "${requestedModel}" is rate limited, falling back to "${fallbackModel}"`,
+      );
+
+      try {
+        return await this.runImageAnalysis(fallbackModel, imageUrl);
+      } catch (fallbackError: unknown) {
+        await this.createAiErrorLog(
+          ai_feature.ANALYZE_IMAGE,
+          fallbackModel,
+          fallbackError,
+        );
+
+        throw fallbackError;
+      }
+    }
+  }
+
+  private async runImageAnalysis(
+    model: string,
+    imageUrl: string,
+  ): Promise<AiAnalysisResult> {
     const client = this.openRouterProvider.getClient();
 
-    try {
-      const response = (await client.chat.completions.create({
-        model: requestedModel,
+    const response = (await client.chat.completions.create({
+      model,
 
-        messages: [
-          {
-            role: 'system',
-            content: `
+      messages: [
+        {
+          role: 'system',
+          content: `
 You are an AI pet image analysis assistant for PAWND, a lost and found pet platform.
 
 Your task is to analyze ONLY the visible physical characteristics of the pet that are useful for identifying or matching the pet.
@@ -104,114 +142,101 @@ Field requirements:
 - Do not repeat environmental information in "description".
 - Keep the description concise and useful for lost-and-found pet identification and matching.
 `.trim(),
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Analyze this pet image and return the pet attributes.',
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl,
-                },
-              },
-            ],
-          },
-        ],
-
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'pet_image_analysis',
-            strict: true,
-
-            schema: {
-              type: 'object',
-
-              properties: {
-                type: {
-                  type: 'string',
-                  enum: ['DOG', 'CAT'],
-                },
-
-                breed: {
-                  type: ['string', 'null'],
-                },
-
-                color: {
-                  type: ['string', 'null'],
-                },
-
-                distinctiveFeatures: {
-                  type: ['string', 'null'],
-                },
-
-                description: {
-                  type: ['string', 'null'],
-                },
-              },
-
-              required: [
-                'type',
-                'breed',
-                'color',
-                'distinctiveFeatures',
-                'description',
-              ],
-
-              additionalProperties: false,
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Analyze this pet image and return the pet attributes.',
             },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl,
+              },
+            },
+          ],
+        },
+      ],
+
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'pet_image_analysis',
+          strict: true,
+
+          schema: {
+            type: 'object',
+
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['DOG', 'CAT'],
+              },
+
+              breed: {
+                type: ['string', 'null'],
+              },
+
+              color: {
+                type: ['string', 'null'],
+              },
+
+              distinctiveFeatures: {
+                type: ['string', 'null'],
+              },
+
+              description: {
+                type: ['string', 'null'],
+              },
+            },
+
+            required: [
+              'type',
+              'breed',
+              'color',
+              'distinctiveFeatures',
+              'description',
+            ],
+
+            additionalProperties: false,
           },
         },
+      },
 
-        max_tokens: 500,
+      max_tokens: 500,
 
-        // requestedModel can be a reasoning model (e.g. nemotron ...
-        // :free). Without this, the model may spend its whole budget
-        // narrating its reasoning ("The user wants...") into
-        // message.content and never emit the JSON answer, even with
-        // response_format set. `exclude: true` keeps the reasoning
-        // internal so content is left for the actual structured output.
-        reasoning: {
-          exclude: true,
-        },
-      } as OpenAI.Chat.Completions.ChatCompletionCreateParams)) as OpenRouterChatCompletion;
+      // model can be a reasoning model (e.g. nemotron ...
+      // :free). Without this, the model may spend its whole budget
+      // narrating its reasoning ("The user wants...") into
+      // message.content and never emit the JSON answer, even with
+      // response_format set. `exclude: true` keeps the reasoning
+      // internal so content is left for the actual structured output.
+      reasoning: {
+        exclude: true,
+      },
+    } as OpenAI.Chat.Completions.ChatCompletionCreateParams)) as OpenRouterChatCompletion;
 
-      await this.createAiSuccessLog(
-        ai_feature.ANALYZE_IMAGE,
-        requestedModel,
-        response,
+    await this.createAiSuccessLog(ai_feature.ANALYZE_IMAGE, model, response);
+
+    if (response.error) {
+      throw new Error(
+        `OpenRouter error: ${response.error.message ?? 'unknown error'}`,
       );
-
-      if (response.error) {
-        throw new Error(
-          `OpenRouter error: ${response.error.message ?? 'unknown error'}`,
-        );
-      }
-
-      const content = response.choices?.[0]?.message.content;
-
-      if (!content) {
-        throw new Error('AI returned empty response');
-      }
-
-      const result = this.parseAnalysisResult(content);
-
-      console.log('[AiService.analyzeImage] result:', result);
-
-      return result;
-    } catch (error: unknown) {
-      await this.createAiErrorLog(
-        ai_feature.ANALYZE_IMAGE,
-        requestedModel,
-        error,
-      );
-
-      throw error;
     }
+
+    const content = response.choices?.[0]?.message.content;
+
+    if (!content) {
+      throw new Error('AI returned empty response');
+    }
+
+    const result = this.parseAnalysisResult(content);
+
+    console.log('[AiService.analyzeImage] result:', result);
+
+    return result;
   }
   // บาง reasoning model ไม่ยอมทำตาม response_format จริง ๆ
   // เลยอาจส่ง markdown code fence หรือ chain-of-thought
@@ -239,6 +264,24 @@ Field requirements:
   //ส่วนย่อย ai log
   private isMockMode(): boolean {
     return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
+  }
+
+  // OpenRouter/upstream providers can signal rate limiting either as an
+  // SDK-level HTTP 429 or, for free models, as a 200 response carrying a
+  // `response.error` body (see OpenRouterChatCompletion) whose message we
+  // wrap into an Error above — so both shapes need checking here.
+  private isRateLimitError(error: unknown): boolean {
+    if (
+      error instanceof Error &&
+      'status' in error &&
+      (error as { status?: unknown }).status === 429
+    ) {
+      return true;
+    }
+
+    const message = error instanceof Error ? error.message : '';
+
+    return /rate.?limit|resource.?exhausted|\b429\b/i.test(message);
   }
 
   private async createAiSuccessLog(
