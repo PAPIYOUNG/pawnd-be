@@ -10,6 +10,11 @@ export type RecordPostEventInput = {
   createdBy?: string | null;
 };
 
+export type DeletePostEventsByTypeInput = {
+  postId: string;
+  eventType: PostEventType;
+};
+
 type PostEventDatabaseClient = Pick<Prisma.TransactionClient, 'postEvent'>;
 
 const PUBLIC_POST_STATUSES: PostStatus[] = [
@@ -30,6 +35,16 @@ export class PostEventsService {
         eventType: input.eventType,
         createdBy: input.createdBy ?? null,
       },
+    });
+  }
+
+  // Caller validates business rules and uses the same transaction as the domain action.
+  deleteEventsByType(
+    client: PostEventDatabaseClient,
+    input: DeletePostEventsByTypeInput,
+  ) {
+    return client.postEvent.deleteMany({
+      where: { postId: input.postId, eventType: input.eventType },
     });
   }
 
