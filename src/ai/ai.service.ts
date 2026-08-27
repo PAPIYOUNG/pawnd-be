@@ -44,7 +44,7 @@ export class AiService {
         response,
       );
 
-      return response.choices[0]?.message.content;
+      return response.choices?.[0]?.message.content;
     } catch (error: unknown) {
       await this.createAiErrorLog(
         ai_feature.ANALYZE_IMAGE,
@@ -175,7 +175,13 @@ Field requirements:
         response,
       );
 
-      const content = response.choices[0]?.message.content;
+      if (response.error) {
+        throw new Error(
+          `OpenRouter error: ${response.error.message ?? 'unknown error'}`,
+        );
+      }
+
+      const content = response.choices?.[0]?.message.content;
 
       if (!content) {
         throw new Error('AI returned empty response');
@@ -225,7 +231,7 @@ Field requirements:
 
       fallbackUsed: requestedModel !== resolvedModel,
 
-      finishReason: response.choices[0]?.finish_reason ?? null,
+      finishReason: response.choices?.[0]?.finish_reason ?? null,
 
       streaming: false,
       success: true,
