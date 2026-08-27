@@ -1,5 +1,10 @@
+import { AiService } from '@/ai/ai.service';
 import { EmbeddingService } from '@/ai/service/embedding.service';
-import type { AiMatch } from '@/database/generated/prisma/client';
+import type {
+  AiMatch,
+  PetPost,
+  PostImage,
+} from '@/database/generated/prisma/client';
 import {
   PostEventType,
   PostStatus,
@@ -8,7 +13,6 @@ import {
 import { PrismaService } from '@/database/prisma.service';
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -31,6 +35,7 @@ export class AiMatchingService {
     private readonly prisma: PrismaService,
     private readonly embeddingService: EmbeddingService,
     private readonly postEventsService: PostEventsService,
+    private readonly aiService: AiService,
   ) {}
 
   async matchPost(userId: string, postId: string) {
@@ -211,6 +216,151 @@ export class AiMatchingService {
     };
   }
 
+  // =========================================================
+  // STANDALONE IMAGE SEARCH (no source PetPost required)
+  // =========================================================
+
+  async matchByImage(
+    file: Express.Multer.File,
+    options: { limit: number; postType?: PostType },
+  ) {
+    if (!file) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    const imageDataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+
+    // Reuse the same AI vision analysis used for post images, so feature
+    // scoring compares against the same breed/color/distinctiveFeatures
+    // vocabulary already stored on PetPost.
+    const analysis = await this.aiService.analyzeImage(imageDataUrl);
+
+    // Reuse the same embedding model/dimension as stored PostImage
+    // embeddings so the query vector lives in the same vector space.
+    const { embedding, model } =
+      await this.embeddingService.generateEmbeddingFromImageSource(
+        imageDataUrl,
+      );
+
+    // Retrieve a wider vector-similarity pool than the requested limit so it
+    // can be re-ranked with featureScore before truncating to `limit`.
+    const poolSize = Math.min(Math.max(options.limit * 5, 30), 100);
+
+    const vectorCandidates = await this.embeddingService.findSimilarPosts(
+      embedding,
+      model,
+      {
+        limit: poolSize,
+        postType: options.postType,
+        // Same hard filter matchPost() applies to candidates: at minimum
+        // the pet type must match.
+        petType: analysis.type,
+      },
+    );
+
+    if (vectorCandidates.length === 0) {
+      return {
+        totalCandidates: 0,
+        totalMatches: 0,
+        analysis,
+        matches: [],
+      };
+    }
+
+    const posts = await this.prisma.petPost.findMany({
+      where: {
+        id: { in: vectorCandidates.map((candidate) => candidate.postId) },
+      },
+      include: {
+        images: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    const postsById = new Map(posts.map((post) => [post.id, post]));
+
+    const matches = vectorCandidates
+      .map((candidate) => {
+        const post = postsById.get(candidate.postId);
+
+        if (!post) {
+          return null;
+        }
+
+        const featureScore = this.calculateFeatureScore(
+          {
+            breed: analysis.breed,
+            color: analysis.color,
+            distinctiveFeatures: analysis.distinctiveFeatures,
+          },
+          post,
+        );
+
+        // No source post exists yet, so location/date scores would have no
+        // real input — they are intentionally left out instead of
+        // fabricated. The persisted pipeline (PAWND_MATCHING_V2) weighs
+        // vector/feature at 30/30 out of 100; renormalized over just these
+        // two available signals that becomes an even 50/50 split.
+        const finalScore = this.clamp(
+          candidate.vectorSimilarity * 0.5 + featureScore * 0.5,
+        );
+
+        return {
+          postId: post.id,
+          vectorSimilarity: candidate.vectorSimilarity,
+          featureScore,
+          finalScore,
+          post: this.toSearchPostResult(post),
+        };
+      })
+      .filter((match): match is NonNullable<typeof match> => match !== null)
+      .sort((a, b) => b.finalScore - a.finalScore)
+      .slice(0, options.limit);
+
+    return {
+      totalCandidates: vectorCandidates.length,
+      totalMatches: matches.length,
+      analysis,
+      matches,
+    };
+  }
+
+  private toSearchPostResult(post: PetPost & { images: PostImage[] }) {
+    return {
+      id: post.id,
+      type: post.type,
+      status: post.status,
+
+      petName: post.petName,
+      petType: post.petType,
+
+      breed: post.breed,
+      gender: post.gender,
+      color: post.color,
+
+      distinctiveFeatures: post.distinctiveFeatures,
+      description: post.description,
+
+      eventDate: post.eventDate,
+
+      latitude: post.latitude,
+      longitude: post.longitude,
+      province: post.province,
+      district: post.district,
+      subdistrict: post.subdistrict,
+      locationDescription: post.locationDescription,
+
+      createdAt: post.createdAt,
+
+      images: post.images.map((image) => ({
+        id: image.id,
+        imageUrl: image.imageUrl,
+        sortOrder: image.sortOrder,
+      })),
+    };
+  }
+
   private async assertOwnedPost(userId: string, postId: string) {
     const post = await this.prisma.petPost.findFirst({
       where: {
@@ -228,9 +378,10 @@ export class AiMatchingService {
     return post;
   }
 
-  async getPostMatches(userId: string, postId: string) {
-    await this.assertOwnedPost(userId, postId);
-
+  // เป็น public endpoint อ่านได้ทุกคนแม้ไม่ login (ไม่มี personalization ต่อ user — pin/dismiss
+  // เป็น per-post action ที่แชร์กันทุกคนที่ดู) สิทธิ์แก้ไข Pin/Dismiss/สั่งจับคู่ใหม่
+  // ยังคงจำกัดเฉพาะเจ้าของผ่าน assertOwnedPost ใน togglePinMatch/toggleDismissMatch/matchPost
+  async getPostMatches(postId: string) {
     const post = await this.prisma.petPost.findUnique({
       where: {
         id: postId,
@@ -258,6 +409,11 @@ export class AiMatchingService {
             images: true,
           },
         },
+
+        // เอาสถานะ pin/dismiss ของ "post นี้" มาด้วย (per-post action)
+        aiMatchUserActions: {
+          where: { postId },
+        },
       },
 
       orderBy: {
@@ -268,6 +424,8 @@ export class AiMatchingService {
     const results = matches.map((match) => {
       const matchedPost =
         match.lostPostId === postId ? match.foundPost : match.lostPost;
+
+      const userAction = match.aiMatchUserActions[0];
 
       return {
         matchId: match.id,
@@ -284,6 +442,8 @@ export class AiMatchingService {
         },
 
         isNotified: match.isNotified,
+        isPinned: userAction?.isPinned ?? false,
+        isDismissed: userAction?.isDismissed ?? false,
         createdAt: match.createdAt,
         updatedAt: match.updatedAt,
       };
@@ -438,10 +598,6 @@ export class AiMatchingService {
 
     if (!post) {
       throw new NotFoundException('Post not found');
-    }
-
-    if (post.id !== userId) {
-      throw new ForbiddenException('You do not own this post');
     }
 
     const match = await this.prisma.aiMatch.findUnique({

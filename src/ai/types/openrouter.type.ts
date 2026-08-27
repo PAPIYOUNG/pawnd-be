@@ -7,4 +7,11 @@ export type OpenRouterChatCompletion =
     usage?: OpenAI.CompletionUsage & {
       cost?: number;
     };
+
+    // OpenRouter can respond with HTTP 200 and this shape instead of
+    // throwing (e.g. moderation rejection, upstream provider failure).
+    error?: {
+      message?: string;
+      code?: number | string;
+    };
   };

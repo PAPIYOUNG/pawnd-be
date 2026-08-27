@@ -2,10 +2,13 @@ import { AiMatchingService } from '@/ai/ai-matching.service';
 import { AiService } from '@/ai/ai.service';
 import { AnalyzeImageDto } from '@/ai/dto/analyze-image.dto';
 import { GeneratePetAvatarDto } from '@/ai/dto/generate-pet-avatar.dto';
+import { SearchByImageDto } from '@/ai/dto/search-by-image.dto';
 import { EmbeddingService } from '@/ai/service/embedding.service';
 import { PetAvatarService } from '@/ai/service/pet-avatar.service';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -14,7 +17,17 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+
+const MAX_SEARCH_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_SEARCH_IMAGE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
 
 @Controller('ai')
 export class AiController {
@@ -60,12 +73,10 @@ export class AiController {
     return this.aiMatchingService.matchPost(userId, postId);
   }
 
+  @Public()
   @Get('posts/:postId/matches')
-  getPostMatches(
-    @CurrentUser('sub') userId: string,
-    @Param('postId', ParseUUIDPipe) postId: string,
-  ) {
-    return this.aiMatchingService.getPostMatches(userId, postId);
+  getPostMatches(@Param('postId', ParseUUIDPipe) postId: string) {
+    return this.aiMatchingService.getPostMatches(postId);
   }
 
   @Patch('posts/:postId/matches/:matchId/pin')
@@ -92,6 +103,31 @@ export class AiController {
     matchId: string,
   ) {
     return this.aiMatchingService.getMatchDetail(matchId);
+  }
+
+  @Post('search-by-image')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      limits: { fileSize: MAX_SEARCH_IMAGE_SIZE_BYTES },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_SEARCH_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Only JPEG, PNG, or WEBP images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  searchByImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Query() query: SearchByImageDto,
+  ) {
+    return this.aiMatchingService.matchByImage(file, query);
   }
 
   @Post('generate-pet-avatar')
