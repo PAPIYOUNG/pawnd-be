@@ -68,6 +68,9 @@ export class HomeService {
         gender: true,
         color: true,
         province: true,
+        district: true,
+        subdistrict: true,
+        locationDescription: true,
         createdAt: true,
         pet: {
           select: {
@@ -91,12 +94,18 @@ export class HomeService {
       posts: posts.map((post) => ({
         id: post.id,
         type: post.type,
-        petName: post.petName || post.pet?.name || 'Unknown',
+        petName:
+          post.petName ||
+          post.pet?.name ||
+          (post.type === 'FOUND' ? 'ไม่ทราบชื่อ' : 'สัตว์เลี้ยง (ไม่ระบุชื่อ)'),
         petType: post.petType || post.pet?.type || 'OTHER',
         breed: post.breed || post.pet?.breed || null,
         gender: post.gender || post.pet?.gender || null,
         color: post.color || post.pet?.color || null,
-        province: post.province || 'Unknown',
+        province: post.province || 'ไม่ระบุจังหวัด',
+        district: post.district || null,
+        subdistrict: post.subdistrict || null,
+        locationDescription: post.locationDescription || null,
         coverImageUrl:
           post.images[0]?.imageUrl || post.pet?.profileImageUrl || null,
         createdAt: post.createdAt,
@@ -119,6 +128,8 @@ export class HomeService {
         petType: true,
         breed: true,
         province: true,
+        district: true,
+        subdistrict: true,
         reunitedAt: true,
         updatedAt: true,
         pet: {
@@ -139,9 +150,11 @@ export class HomeService {
     return {
       posts: posts.map((post) => ({
         id: post.id,
-        petName: post.petName || post.pet?.name || 'Unknown',
+        petName: post.petName || post.pet?.name || 'สัตว์เลี้ยง',
         petType: post.petType || post.pet?.type || 'OTHER',
-        province: post.province || 'Unknown',
+        province: post.province || 'ไม่ระบุจังหวัด',
+        district: post.district || null,
+        subdistrict: post.subdistrict || null,
         reunitedAt: post.reunitedAt || post.updatedAt,
         coverImageUrl:
           post.images[0]?.imageUrl || post.pet?.profileImageUrl || null,
