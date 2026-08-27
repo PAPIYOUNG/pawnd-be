@@ -13,7 +13,6 @@ import {
 import { PrismaService } from '@/database/prisma.service';
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -379,9 +378,9 @@ export class AiMatchingService {
     return post;
   }
 
-  async getPostMatches(userId: string, postId: string) {
-    await this.assertOwnedPost(userId, postId);
-
+  // อ่านได้ทุกคนที่ login แล้ว ไม่จำกัดเฉพาะเจ้าของประกาศ (สิทธิ์แก้ไข Pin/Dismiss/สั่งจับคู่ใหม่
+  // ยังคงจำกัดเฉพาะเจ้าของผ่าน assertOwnedPost ใน togglePinMatch/toggleDismissMatch/matchPost)
+  async getPostMatches(_userId: string, postId: string) {
     const post = await this.prisma.petPost.findUnique({
       where: {
         id: postId,
@@ -409,6 +408,11 @@ export class AiMatchingService {
             images: true,
           },
         },
+
+        // เอาสถานะ pin/dismiss ของ "post นี้" มาด้วย (per-post action)
+        aiMatchUserActions: {
+          where: { postId },
+        },
       },
 
       orderBy: {
@@ -419,6 +423,8 @@ export class AiMatchingService {
     const results = matches.map((match) => {
       const matchedPost =
         match.lostPostId === postId ? match.foundPost : match.lostPost;
+
+      const userAction = match.aiMatchUserActions[0];
 
       return {
         matchId: match.id,
@@ -435,6 +441,8 @@ export class AiMatchingService {
         },
 
         isNotified: match.isNotified,
+        isPinned: userAction?.isPinned ?? false,
+        isDismissed: userAction?.isDismissed ?? false,
         createdAt: match.createdAt,
         updatedAt: match.updatedAt,
       };
@@ -589,10 +597,6 @@ export class AiMatchingService {
 
     if (!post) {
       throw new NotFoundException('Post not found');
-    }
-
-    if (post.id !== userId) {
-      throw new ForbiddenException('You do not own this post');
     }
 
     const match = await this.prisma.aiMatch.findUnique({
