@@ -6,6 +6,7 @@ import { OpenRouterChatCompletion } from '@/ai/types/openrouter.type';
 import { ai_feature } from '@/database/generated/prisma/enums';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
@@ -167,7 +168,17 @@ Field requirements:
         },
 
         max_tokens: 500,
-      })) as OpenRouterChatCompletion;
+
+        // requestedModel can be a reasoning model (e.g. nemotron ...
+        // :free). Without this, the model may spend its whole budget
+        // narrating its reasoning ("The user wants...") into
+        // message.content and never emit the JSON answer, even with
+        // response_format set. `exclude: true` keeps the reasoning
+        // internal so content is left for the actual structured output.
+        reasoning: {
+          exclude: true,
+        },
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParams)) as OpenRouterChatCompletion;
 
       await this.createAiSuccessLog(
         ai_feature.ANALYZE_IMAGE,
@@ -187,7 +198,7 @@ Field requirements:
         throw new Error('AI returned empty response');
       }
 
-      const result = JSON.parse(content) as AiAnalysisResult;
+      const result = this.parseAnalysisResult(content);
 
       console.log('[AiService.analyzeImage] result:', result);
 
@@ -202,6 +213,29 @@ Field requirements:
       throw error;
     }
   }
+  // บาง reasoning model ไม่ยอมทำตาม response_format จริง ๆ
+  // เลยอาจส่ง markdown code fence หรือ chain-of-thought
+  // แทรกก่อน/หลัง JSON มาด้วย จึงต้อง extract JSON object ออกมาก่อน parse
+  private parseAnalysisResult(content: string): AiAnalysisResult {
+    try {
+      return JSON.parse(content) as AiAnalysisResult;
+    } catch {
+      const match = content.match(/\{[\s\S]*\}/);
+
+      if (match) {
+        try {
+          return JSON.parse(match[0]) as AiAnalysisResult;
+        } catch {
+          // fall through to the error below
+        }
+      }
+
+      throw new Error(
+        `AI returned a non-JSON response: ${content.slice(0, 200)}`,
+      );
+    }
+  }
+
   //ส่วนย่อย ai log
   private isMockMode(): boolean {
     return this.configService.get<boolean>('AI_MOCK_MODE') ?? true;
