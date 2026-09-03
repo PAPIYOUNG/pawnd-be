@@ -26,7 +26,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000);
+
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port, '0.0.0.0');
+  const logger = new Logger('Bootstrap');
+  logger.log(`Application is running on port ${port} (0.0.0.0)`);
 }
 bootstrap().catch((error: unknown) => {
   const logger = new Logger('Bootstrap');
