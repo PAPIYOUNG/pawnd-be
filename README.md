@@ -1,98 +1,78 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Pawnd Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend API for Pawnd, a platform for reporting lost and found pets. The service is built with NestJS, TypeScript, Prisma, and PostgreSQL, with Cloudinary-backed media and JWT authentication.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Features
 
-## Description
+- User accounts and authentication
+- Pet profiles and lost/found posts
+- Post status and reunion tracking
+- AI matching data and notifications
+- Community posts, comments, and content reports
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Requirements
 
-## Project setup
+- Node.js and pnpm
+- PostgreSQL database
+- Cloudinary account credentials
+
+## Getting started
+
+Install dependencies and create a local environment file:
 
 ```bash
-$ pnpm install
+pnpm install
+cp .env.example .env
 ```
 
-## Compile and run the project
+Set the following values in .env:
+
+| Variable | Description |
+| --- | --- |
+| `PORT` | Port used by the API (for example, `3000`) |
+| `DATABASE_URL` | PostgreSQL connection URL |
+| `JWT_SECRET` | Secret used to sign tokens; provide at least 32 characters |
+| `JWT_EXPIRE_IN` | Token lifetime in seconds (for example, `3600`) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
+
+Apply database migrations and generate the Prisma client:
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm run prisma:migrate
+pnpm run prisma:generate
 ```
 
-## Run tests
+Start the API in watch mode:
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm run start:dev
 ```
 
-## Deployment
+The API listens on the port configured by `PORT`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Useful commands
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Command | Purpose |
+| --- | --- |
+| `pnpm run build` | Compile the application |
+| `pnpm run start` | Start the application |
+| `pnpm run start:dev` | Start in watch mode |
+| `pnpm run start:prod` | Start the compiled application |
+| `pnpm run test` | Run unit tests |
+| `pnpm run test:e2e` | Run end-to-end tests |
+| `pnpm run test:cov` | Run tests with coverage |
+| `pnpm run prisma:studio` | Open Prisma Studio |
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+## การเริ่มต้นใช้งาน (ภาษาไทย)
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Pawnd Backend API เป็นระบบหลังบ้านสำหรับแพลตฟอร์มประกาศสัตว์เลี้ยงหายและพบสัตว์เลี้ยง พัฒนาด้วย NestJS, TypeScript, Prisma และ PostgreSQL รองรับการยืนยันตัวตนด้วย JWT และจัดเก็บสื่อผ่าน Cloudinary
 
-## Resources
+1. ติดตั้ง Node.js, pnpm และเตรียมฐานข้อมูล PostgreSQL กับบัญชี Cloudinary
+2. รัน `pnpm install` แล้วคัดลอก `.env.example` เป็นไฟล์ `.env`
+3. กรอกค่าตัวแปรแวดล้อมให้ครบ โดย `JWT_SECRET` ต้องมีอย่างน้อย 32 ตัวอักษร และ `JWT_EXPIRE_IN` ระบุเป็นวินาที
+4. รัน `pnpm run prisma:migrate` และ `pnpm run prisma:generate`
+5. รัน `pnpm run start:dev` เพื่อเริ่มเซิร์ฟเวอร์โหมดพัฒนา
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+อย่านำค่า secret หรือไฟล์ `.env` ขึ้น Git
